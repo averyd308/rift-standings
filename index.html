@@ -358,6 +358,36 @@
             letter-spacing: 2px;
         }
 
+        /* Stat columns */
+        .kda-val  { font-weight: 700; font-size: 0.88rem; }
+        .dmg-val  { font-size: 0.85rem; color: #c8a96e; }
+        .stat-sub { font-size: 0.62rem; color: #3a4a6a; margin-top: 2px; }
+
+        /* Wider modal for extra fields */
+        .modal { max-width: 480px !important; }
+        .modal-fields-3 {
+            display: flex; gap: 10px; margin-bottom: 14px;
+        }
+        .modal-fields-3 .field input { font-size: 0.95rem; }
+        .field-full { margin-bottom: 14px; }
+        .field-full label {
+            display: block; font-size: 0.62rem; letter-spacing: 3px;
+            text-transform: uppercase; color: #3a4a6a; margin-bottom: 7px;
+        }
+        .field-full input {
+            width: 100%;
+            background: rgba(0,0,0,0.5); border: 1px solid #1a2840;
+            color: #c8a96e; padding: 10px; border-radius: 3px;
+            font-size: 0.9rem; outline: none;
+        }
+        .field-full input:focus { border-color: #c8a96e; }
+        .field-full input::placeholder { color: #2a3a5a; }
+        .modal-section-label {
+            font-size: 0.6rem; letter-spacing: 3px; text-transform: uppercase;
+            color: #3a4a6a; margin-bottom: 10px; margin-top: 6px;
+            border-top: 1px solid #1a2840; padding-top: 14px;
+        }
+
         /* ── Modal ───────────────────────────────── */
         .overlay {
             display: none;
@@ -536,6 +566,8 @@
                     <th class="center">W</th>
                     <th class="center">L</th>
                     <th class="center">Win%</th>
+                    <th class="center">KDA</th>
+                    <th class="center">Avg DMG</th>
                     <th class="center admin-col">Record</th>
                     <th class="center admin-col"></th>
                 </tr>
@@ -572,6 +604,29 @@
                 <label>Losses</label>
                 <input type="number" id="m-losses" min="0" />
             </div>
+        </div>
+        <div class="modal-section-label">K / D / A &amp; Damage — running totals</div>
+        <div class="modal-fields-3">
+            <div class="field">
+                <label>Kills</label>
+                <input type="number" id="m-kills" min="0" />
+            </div>
+            <div class="field">
+                <label>Deaths</label>
+                <input type="number" id="m-deaths" min="0" />
+            </div>
+            <div class="field">
+                <label>Assists</label>
+                <input type="number" id="m-assists" min="0" />
+            </div>
+        </div>
+        <div class="field-full">
+            <label>Total Damage Dealt</label>
+            <input type="number" id="m-damage" min="0" placeholder="0" />
+        </div>
+        <div class="modal-section-label">Riot ID (for future auto-sync)</div>
+        <div class="field-full">
+            <input type="text" id="m-riot-id" placeholder="PlayerName#NA1" />
         </div>
         <div class="modal-actions">
             <button class="btn-ghost" onclick="closeModal()">Cancel</button>
@@ -864,7 +919,14 @@ let players = [];
 let editId  = null;
 
 function toPlayer(row) {
-    return { id: row.id, name: row.name, champKey: row.champ_key, champName: row.champ_name, wins: row.wins, losses: row.losses };
+    return {
+        id: row.id, name: row.name,
+        champKey: row.champ_key, champName: row.champ_name,
+        wins: row.wins, losses: row.losses,
+        kills: row.kills || 0, deaths: row.deaths || 0, assists: row.assists || 0,
+        damage: row.damage || 0,
+        riotId: row.riot_id || '',
+    };
 }
 
 async function loadPlayers() {
@@ -893,8 +955,8 @@ async function addPlayer() {
         name,
         champ_key:  selectedChamp?.key  || null,
         champ_name: selectedChamp?.name || null,
-        wins: 0,
-        losses: 0,
+        wins: 0, losses: 0,
+        kills: 0, deaths: 0, assists: 0, damage: 0,
     });
 
     if (error) { console.error(error); return; }
@@ -926,11 +988,16 @@ function openModal(id) {
     const p = players.find(x => x.id === id); if (!p) return;
     editId     = id;
     modalChamp = p.champKey ? { key: p.champKey, name: p.champName } : null;
-    document.getElementById('m-avatar').src     = p.champKey ? imgUrl(p.champKey) : '';
+    document.getElementById('m-avatar').src        = p.champKey ? imgUrl(p.champKey) : '';
     document.getElementById('m-name').textContent  = p.name;
     document.getElementById('m-champ').textContent = p.champName || 'Click portrait to set champion';
-    document.getElementById('m-wins').value         = p.wins;
-    document.getElementById('m-losses').value       = p.losses;
+    document.getElementById('m-wins').value        = p.wins;
+    document.getElementById('m-losses').value      = p.losses;
+    document.getElementById('m-kills').value       = p.kills;
+    document.getElementById('m-deaths').value      = p.deaths;
+    document.getElementById('m-assists').value     = p.assists;
+    document.getElementById('m-damage').value      = p.damage;
+    document.getElementById('m-riot-id').value     = p.riotId;
     document.getElementById('modal').classList.add('active');
     document.getElementById('m-wins').focus();
 }
@@ -946,9 +1013,16 @@ async function saveModal() {
     const wins   = Math.max(0, parseInt(document.getElementById('m-wins').value)   || 0);
     const losses = Math.max(0, parseInt(document.getElementById('m-losses').value) || 0);
 
+    const kills   = Math.max(0, parseInt(document.getElementById('m-kills').value)   || 0);
+    const deaths  = Math.max(0, parseInt(document.getElementById('m-deaths').value)  || 0);
+    const assists = Math.max(0, parseInt(document.getElementById('m-assists').value) || 0);
+    const damage  = Math.max(0, parseInt(document.getElementById('m-damage').value)  || 0);
+    const riotId  = document.getElementById('m-riot-id').value.trim() || null;
+
     const { error } = await db.from('players').update({
-        wins,
-        losses,
+        wins, losses,
+        kills, deaths, assists, damage,
+        riot_id:    riotId,
         champ_key:  modalChamp?.key  || null,
         champ_name: modalChamp?.name || null,
     }).eq('id', editId);
@@ -964,6 +1038,21 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 function wr(w, l) { return w+l===0 ? 0 : Math.round(w/(w+l)*100); }
 function wrColor(r) { return r>=60?'#50e070':r>=50?'#c8a96e':'#e05050'; }
 
+function kdaRatio(k, d, a) {
+    if (k+d+a === 0) return null;
+    return ((k + a) / Math.max(1, d)).toFixed(2);
+}
+function kdaColor(r) {
+    if (r === null) return '#3a4a6a';
+    if (r >= 4) return '#50e070';
+    if (r >= 2.5) return '#c8a96e';
+    return '#e05050';
+}
+function avgDmg(dmg, games) {
+    if (!dmg || !games) return null;
+    return Math.round(dmg / games).toLocaleString();
+}
+
 const MEDALS = ['🥇','🥈','🥉'];
 
 function render() {
@@ -976,19 +1065,33 @@ function render() {
 
     const tbody = document.getElementById('standings-body');
     if (!sorted.length) {
-        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No summoners yet — add one above!</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state">No summoners yet — add one above!</div></td></tr>`;
         return;
     }
 
     tbody.innerHTML = sorted.map((p, i) => {
-        const rank = i + 1;
-        const rate = wr(p.wins, p.losses);
+        const rank  = i + 1;
+        const rate  = wr(p.wins, p.losses);
         const color = wrColor(rate);
         const medal = MEDALS[i] ?? rank;
         const hasImg = !!p.champKey;
         const avatar = hasImg
             ? `<div class="avatar-wrap"><img src="${imgUrl(p.champKey)}" alt="${esc(p.champName)}" /></div>`
             : `<div class="avatar-wrap" style="width:46px;height:46px;border-radius:50%;border:2px dashed #1a2840;display:flex;align-items:center;justify-content:center;color:#2a3a5a;font-size:1.2rem">?</div>`;
+
+        const games   = p.wins + p.losses;
+        const kda     = kdaRatio(p.kills, p.deaths, p.assists);
+        const kdaClr  = kdaColor(kda);
+        const dmg     = avgDmg(p.damage, games);
+
+        const kdaCell = kda !== null
+            ? `<div class="kda-val" style="color:${kdaClr}">${kda}</div>
+               <div class="stat-sub">${p.kills}/${p.deaths}/${p.assists}</div>`
+            : `<span style="color:#3a4a6a">—</span>`;
+
+        const dmgCell = dmg !== null
+            ? `<div class="dmg-val">${dmg}</div>`
+            : `<span style="color:#3a4a6a">—</span>`;
 
         return `<tr>
             <td class="rank-col">${medal}</td>
@@ -1004,9 +1107,11 @@ function render() {
             <td class="center wins">${p.wins}</td>
             <td class="center losses">${p.losses}</td>
             <td class="center">
-                <div class="wr-val" style="color:${color}">${p.wins+p.losses===0?'—':rate+'%'}</div>
+                <div class="wr-val" style="color:${color}">${games===0?'—':rate+'%'}</div>
                 <div class="wr-bar"><div class="wr-fill" style="width:${rate}%;background:${color}"></div></div>
             </td>
+            <td class="center">${kdaCell}</td>
+            <td class="center">${dmgCell}</td>
             <td class="center admin-col">
                 <div class="row-actions">
                     <button class="qbtn w" onclick="addWin(${p.id})" title="Add Win">W</button>
