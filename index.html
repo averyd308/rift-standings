@@ -468,10 +468,64 @@
         }
         .btn-ghost:hover { border-color: #c8a96e; color: #c8a96e; }
 
-        @media (max-width: 600px) {
-            td, th { padding: 9px 7px; }
-            .wr-bar { width: 42px; }
-            .picker-dropdown { width: calc(100vw - 20px); }
+        /* ── Mobile stats sub-text (hidden on desktop) ── */
+        .mobile-stats { display: none; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+        .mobile-stat  { font-size: 0.65rem; color: #4a5a7a; }
+        .mobile-stat b { color: #c8a96e; font-weight: 600; }
+
+        @media (max-width: 660px) {
+            /* Layout */
+            .container { padding: 16px 12px 60px; }
+            .header { margin-top: 48px; margin-bottom: 20px; }
+            .admin-controls { top: 10px; right: 10px; gap: 6px; }
+            .admin-badge { display: none !important; }
+            .card { padding: 14px; }
+
+            /* Add summoner form — stack vertically */
+            .form-row { flex-direction: column; }
+            .form-row input[type="text"] { width: 100%; min-width: unset; }
+            .champ-picker, .picker-btn { width: 100%; }
+            .form-row .btn { width: 100%; text-align: center; }
+
+            /* Table — hide KDA & DMG columns, show them inline */
+            .kda-col, .dmg-col { display: none !important; }
+            .mobile-stats { display: flex; }
+            td, th { padding: 9px 6px; }
+            .wr-bar { width: 40px; }
+            .rank-col { width: 28px; font-size: 0.95rem; }
+            .avatar-wrap { width: 36px; height: 36px; }
+            .name-cell { gap: 8px; }
+            .player-name { font-size: 0.85rem; }
+            .champ-sub { font-size: 0.62rem; }
+
+            /* Make table scroll if admin cols push it wide */
+            .card > div + table,
+            .card table { display: block; overflow-x: auto; }
+
+            /* Modals — near-fullscreen */
+            .overlay { align-items: flex-end; padding-bottom: 0; }
+            .modal {
+                max-width: 100% !important;
+                width: 100% !important;
+                margin: 0 !important;
+                border-radius: 12px 12px 0 0 !important;
+                max-height: 92vh;
+                overflow-y: auto;
+            }
+            .modal-fields { flex-direction: column; gap: 10px; }
+            .modal-fields-3 { gap: 8px; }
+            .field-full input { font-size: 0.85rem; }
+
+            /* Log game rows */
+            .lg-row { flex-wrap: wrap; row-gap: 6px; }
+            .lg-name { min-width: 0; max-width: 120px; }
+            .lg-controls { width: 100%; padding-left: 58px; flex-wrap: wrap; gap: 4px; }
+            .lg-input { width: 38px; }
+            .lg-input.wide { width: 58px; }
+            .lg-players { max-height: 48vh; }
+
+            /* Champion picker */
+            .picker-dropdown { width: calc(100vw - 24px) !important; left: 12px !important; }
         }
 
         /* ── Admin ───────────────────────────────── */
@@ -581,11 +635,6 @@
             min-height: 18px; margin-bottom: 10px; letter-spacing: 1px;
         }
 
-        @media (max-width: 580px) {
-            .lg-controls { flex-wrap: wrap; justify-content: flex-end; }
-            .lg-input { width: 38px; }
-            .lg-input.wide { width: 58px; }
-        }
 
         /* Admin password modal */
         #admin-modal .modal { max-width: 360px; }
@@ -650,8 +699,8 @@
                     <th class="center">W</th>
                     <th class="center">L</th>
                     <th class="center">Win%</th>
-                    <th class="center">KDA</th>
-                    <th class="center">Avg DMG</th>
+                    <th class="center kda-col">KDA</th>
+                    <th class="center dmg-col">Avg DMG</th>
                     <th class="center admin-col">Record</th>
                     <th class="center admin-col"></th>
                 </tr>
@@ -1204,6 +1253,13 @@ function render() {
             ? `<div class="dmg-val">${dmg}</div>`
             : `<span style="color:#3a4a6a">—</span>`;
 
+        // Shown on mobile instead of hidden columns
+        const mobileStats = (kda !== null || dmg !== null) ? `
+            <div class="mobile-stats">
+                ${kda !== null ? `<span class="mobile-stat">KDA: <b style="color:${kdaClr}">${kda}</b></span>` : ''}
+                ${dmg !== null ? `<span class="mobile-stat">DMG: <b>${dmg}</b></span>` : ''}
+            </div>` : '';
+
         return `<tr>
             <td class="rank-col">${medal}</td>
             <td>
@@ -1212,6 +1268,7 @@ function render() {
                     <div>
                         <div class="player-name">${esc(p.name)}</div>
                         <div class="champ-sub">${p.champName ? esc(p.champName) : ''}</div>
+                        ${mobileStats}
                     </div>
                 </div>
             </td>
@@ -1221,8 +1278,8 @@ function render() {
                 <div class="wr-val" style="color:${color}">${games===0?'—':rate+'%'}</div>
                 <div class="wr-bar"><div class="wr-fill" style="width:${rate}%;background:${color}"></div></div>
             </td>
-            <td class="center">${kdaCell}</td>
-            <td class="center">${dmgCell}</td>
+            <td class="center kda-col">${kdaCell}</td>
+            <td class="center dmg-col">${dmgCell}</td>
             <td class="center admin-col">
                 <div class="row-actions">
                     <button class="qbtn w" onclick="addWin(${p.id})" title="Add Win">W</button>
