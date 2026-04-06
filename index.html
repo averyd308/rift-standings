@@ -639,10 +639,11 @@
         /* ── Match History ───────────────────────── */
         .history-toggle {
             background: transparent; border: none; cursor: pointer;
-            color: #5a7aaa; font-size: 0.78rem; padding: 2px 5px;
-            transition: color 0.15s; line-height: 1; flex-shrink: 0;
+            color: #5a7aaa; font-size: 1rem; padding: 3px 7px;
+            transition: color 0.15s, background 0.15s; line-height: 1;
+            flex-shrink: 0; border-radius: 3px;
         }
-        .history-toggle:hover { color: #c8a96e; }
+        .history-toggle:hover { color: #c8a96e; background: rgba(200,169,110,0.1); }
 
         .history-row td { padding: 0 !important; border-bottom: 2px solid #0d1828 !important; }
         .history-panel {
@@ -1361,13 +1362,13 @@ function render() {
         const isExpanded = expandedPlayers.has(p.id);
         return `<tr id="player-row-${p.id}">
             <td class="rank-col">${medal}</td>
-            <td>
+            <td style="cursor:pointer" onclick="toggleHistory(${p.id})" title="Toggle match history">
                 <div class="name-cell">
                     ${avatar}
                     <div style="flex:1;min-width:0">
                         <div style="display:flex;align-items:center;gap:4px">
                             <div class="player-name">${esc(p.name)}</div>
-                            <button class="history-toggle" onclick="toggleHistory(${p.id})" title="Match history">${isExpanded ? '▴' : '▾'}</button>
+                            <span class="history-toggle">${isExpanded ? '▴' : '▾'}</span>
                         </div>
                         <div class="champ-sub">${p.champName ? esc(p.champName) : ''}</div>
                         ${mobileStats}
@@ -1564,6 +1565,7 @@ function toggleHistory(id) {
         if (histRow) histRow.remove();
         const toggle = playerRow.querySelector('.history-toggle');
         if (toggle) toggle.textContent = '▾';
+        playerRow.querySelector('td[onclick]').style.background = '';
     } else {
         // Expand
         expandedPlayers.add(id);
