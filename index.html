@@ -620,6 +620,7 @@
 
     <div class="card">
         <div class="card-title">+ Add Summoner</div>
+        <div id="add-err" style="color:#e05050;font-size:0.78rem;margin-bottom:10px;display:none"></div>
         <div class="form-row">
             <input type="text" id="player-name" placeholder="Summoner name..." />
 
@@ -1052,13 +1053,27 @@ async function addPlayer() {
         champ_key:  selectedChamp?.key  || null,
         champ_name: selectedChamp?.name || null,
         wins: 0, losses: 0,
-        kills: 0, deaths: 0, assists: 0, damage: 0,
     });
 
-    if (error) { console.error(error); return; }
+    if (error) {
+        console.error(error);
+        showAddError(error.message);
+        return;
+    }
     inp.value = '';
     inp.focus();
+    clearAddError();
     // real-time subscription handles the re-render
+}
+
+function showAddError(msg) {
+    const el = document.getElementById('add-err');
+    el.textContent = '⚠ ' + msg;
+    el.style.display = 'block';
+}
+function clearAddError() {
+    const el = document.getElementById('add-err');
+    el.style.display = 'none';
 }
 
 document.getElementById('player-name').addEventListener('keydown', e => { if (e.key === 'Enter') addPlayer(); });
