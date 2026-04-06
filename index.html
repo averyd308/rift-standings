@@ -636,6 +636,65 @@
         }
 
 
+        /* ── Match History ───────────────────────── */
+        .history-toggle {
+            background: transparent; border: none; cursor: pointer;
+            color: #2a3a5a; font-size: 0.78rem; padding: 2px 5px;
+            transition: color 0.15s; line-height: 1; flex-shrink: 0;
+        }
+        .history-toggle:hover { color: #c8a96e; }
+
+        .history-row td { padding: 0 !important; border-bottom: 2px solid #0d1828 !important; }
+        .history-panel {
+            display: flex; gap: 8px; padding: 10px 14px 12px;
+            overflow-x: auto; background: rgba(4,8,18,0.7);
+        }
+        .history-panel::-webkit-scrollbar { height: 4px; }
+        .history-panel::-webkit-scrollbar-thumb { background: #1a2840; border-radius: 2px; }
+
+        .history-empty, .history-loading {
+            color: #2a3a5a; font-size: 0.72rem; padding: 12px 4px;
+            letter-spacing: 1px; white-space: nowrap;
+        }
+
+        .game-card {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 4px; padding: 8px 10px; border-radius: 4px; min-width: 74px;
+            flex-shrink: 0; background: rgba(10,16,32,0.9);
+            border-top: 2px solid transparent; transition: border-color 0.15s;
+        }
+        .game-card.win  { border-top-color: #50e070; }
+        .game-card.loss { border-top-color: #e05050; }
+
+        .game-champ {
+            width: 34px; height: 34px; border-radius: 50%;
+            object-fit: cover; border: 2px solid #1a2840;
+            display: block;
+        }
+        .game-champ-empty {
+            width: 34px; height: 34px; border-radius: 50%;
+            border: 2px dashed #1a2840;
+            display: flex; align-items: center; justify-content: center;
+            color: #2a3a5a; font-size: 0.85rem;
+        }
+        .game-badge {
+            font-size: 0.6rem; font-weight: 800; letter-spacing: 1px;
+            padding: 1px 7px; border-radius: 2px;
+        }
+        .game-badge.win  { color: #50e070; background: rgba(80,224,112,0.12); }
+        .game-badge.loss { color: #e05050; background: rgba(224,80,80,0.12); }
+        .game-kda  { color: #c8a96e; font-size: 0.68rem; font-weight: 600; }
+        .game-dmg  { color: #5a6a8a; font-size: 0.62rem; }
+        .game-date { color: #2a3a5a; font-size: 0.58rem; }
+
+        /* Log game per-player champion button */
+        .lg-champ-btn {
+            cursor: pointer; flex-shrink: 0; transition: opacity 0.15s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .lg-champ-btn:hover { opacity: 0.75; }
+        .lg-champ-btn img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+
         /* Admin password modal */
         #admin-modal .modal { max-width: 360px; }
         .admin-modal-icon { text-align: center; font-size: 2rem; margin-bottom: 6px; }
@@ -943,10 +1002,11 @@ function buildPickerGrid(filter = '') {
     const visible = q ? CHAMPS.filter(c => c.name.toLowerCase().includes(q)) : CHAMPS;
 
     let html = '';
+    const curChamp = currentPickerChamp();
 
     // "No champion" option
     if (!q) {
-        const sel = !selectedChamp ? 'selected' : '';
+        const sel = !curChamp ? 'selected' : '';
         html += `<div class="no-champ-opt ${sel}" onclick="selectChamp(null)">
             <div class="no-icon">?</div>
             <span>None</span>
@@ -954,7 +1014,7 @@ function buildPickerGrid(filter = '') {
     }
 
     for (const c of visible) {
-        const sel = selectedChamp && selectedChamp.key === c.key ? 'selected' : '';
+        const sel = curChamp && curChamp.key === c.key ? 'selected' : '';
         html += `<div class="champ-option ${sel}" data-key="${c.key}" data-name="${esc(c.name)}" onclick="selectChampEl(this)">
             <img src="${imgUrl(c.key)}" alt="${esc(c.name)}" loading="lazy" />
             <span>${esc(c.name)}</span>
@@ -972,9 +1032,20 @@ function selectChampEl(el) {
     selectChamp({ key: el.dataset.key, name: el.dataset.name });
 }
 
-// 'add' = new player form, 'modal' = edit modal
+// 'add' = new player form, 'modal' = edit modal, {type:'loggame', playerId} = per-player log game
 let pickerTarget = 'add';
 let modalChamp = null;
+
+// ── Match history state ───────────────────────────────
+const lgChamps       = new Map(); // playerId → {key, name} for current logged game
+const expandedPlayers = new Set(); // player IDs with history panel open
+const historyCache   = new Map(); // playerId → games[]
+
+function currentPickerChamp() {
+    if (pickerTarget === 'modal') return modalChamp;
+    if (pickerTarget?.type === 'loggame') return lgChamps.get(pickerTarget.playerId) || null;
+    return selectedChamp;
+}
 
 function selectChamp(champ) {
     if (pickerTarget === 'modal') {
@@ -988,6 +1059,10 @@ function selectChamp(champ) {
             avatarEl.src = '';
             subEl.textContent = 'No champion selected';
         }
+    } else if (pickerTarget?.type === 'loggame') {
+        const pid = pickerTarget.playerId;
+        if (champ) lgChamps.set(pid, champ); else lgChamps.delete(pid);
+        updateLgChampBtn(pid, champ);
     } else {
         selectedChamp = champ;
         const thumbWrap = document.getElementById('picker-thumb-wrap');
@@ -1037,6 +1112,24 @@ function openModalPicker() {
     openPickerAt(document.querySelector('.modal-avatar-wrap'));
 }
 
+function openLgChampPicker(playerId, anchorEl) {
+    pickerTarget = { type: 'loggame', playerId };
+    document.getElementById('picker-btn').classList.remove('open');
+    openPickerAt(anchorEl);
+}
+
+function updateLgChampBtn(pid, champ) {
+    const btn = document.getElementById(`lg-champ-btn-${pid}`);
+    if (!btn) return;
+    if (champ) {
+        btn.innerHTML = `<div class="lg-avatar"><img src="${imgUrl(champ.key)}" alt="${esc(champ.name)}" /></div>`;
+        btn.title = champ.name;
+    } else {
+        btn.innerHTML = `<div class="lg-avatar empty">?</div>`;
+        btn.title = 'Pick champion';
+    }
+}
+
 function closePicker() {
     document.getElementById('picker-dropdown').classList.remove('open');
     document.getElementById('picker-btn').classList.remove('open');
@@ -1048,10 +1141,11 @@ function filterPicker() {
 
 // Close picker when clicking outside
 document.addEventListener('click', e => {
-    const inPicker   = document.getElementById('champ-picker').contains(e.target);
-    const inDropdown = document.getElementById('picker-dropdown').contains(e.target);
+    const inPicker      = document.getElementById('champ-picker').contains(e.target);
+    const inDropdown    = document.getElementById('picker-dropdown').contains(e.target);
     const inModalAvatar = document.querySelector('.modal-avatar-wrap')?.contains(e.target);
-    if (!inPicker && !inDropdown && !inModalAvatar) closePicker();
+    const inLgChampBtn  = e.target.closest('.lg-champ-btn');
+    if (!inPicker && !inDropdown && !inModalAvatar && !inLgChampBtn) closePicker();
 });
 
 // ── Supabase ──────────────────────────────────────────
@@ -1229,7 +1323,11 @@ function render() {
         return;
     }
 
-    tbody.innerHTML = sorted.map((p, i) => {
+    const sortedPlayers = sorted; // keep ref for post-render
+    // Will restore expanded history rows after innerHTML is set
+    const toRestore = sortedPlayers.filter(p => expandedPlayers.has(p.id));
+
+    tbody.innerHTML = sortedPlayers.map((p, i) => {
         const rank  = i + 1;
         const rate  = wr(p.wins, p.losses);
         const color = wrColor(rate);
@@ -1260,13 +1358,17 @@ function render() {
                 ${dmg !== null ? `<span class="mobile-stat">DMG: <b>${dmg}</b></span>` : ''}
             </div>` : '';
 
-        return `<tr>
+        const isExpanded = expandedPlayers.has(p.id);
+        return `<tr id="player-row-${p.id}">
             <td class="rank-col">${medal}</td>
             <td>
                 <div class="name-cell">
                     ${avatar}
-                    <div>
-                        <div class="player-name">${esc(p.name)}</div>
+                    <div style="flex:1;min-width:0">
+                        <div style="display:flex;align-items:center;gap:4px">
+                            <div class="player-name">${esc(p.name)}</div>
+                            <button class="history-toggle" onclick="toggleHistory(${p.id})" title="Match history">${isExpanded ? '▴' : '▾'}</button>
+                        </div>
                         <div class="champ-sub">${p.champName ? esc(p.champName) : ''}</div>
                         ${mobileStats}
                     </div>
@@ -1294,6 +1396,13 @@ function render() {
             </td>
         </tr>`;
     }).join('');
+
+    // Re-insert history panels for players that were expanded before re-render
+    for (const p of toRestore) {
+        const cached = historyCache.get(p.id);
+        if (cached) insertHistoryRow(p.id, cached);
+        else fetchAndShowHistory(p.id);
+    }
 }
 
 function esc(s) {
@@ -1304,12 +1413,18 @@ loadPlayers();
 
 // ── Log Game ──────────────────────────────────────────
 function openLogGame() {
+    lgChamps.clear();
+    players.forEach(p => {
+        if (p.champKey) lgChamps.set(p.id, { key: p.champKey, name: p.champName });
+    });
     document.getElementById('lg-err').textContent = '';
     buildLogRows();
     document.getElementById('log-modal').classList.add('active');
 }
 
 function closeLogGame() {
+    closePicker();
+    lgChamps.clear();
     document.getElementById('log-modal').classList.remove('active');
 }
 
@@ -1323,15 +1438,21 @@ function buildLogRows() {
     }
 
     container.innerHTML = players.map(p => {
-        const avatar = p.champKey
-            ? `<div class="lg-avatar"><img src="${imgUrl(p.champKey)}" alt="${esc(p.champName)}" /></div>`
+        const lgChamp = lgChamps.get(p.id) || null;
+        const champInner = lgChamp
+            ? `<div class="lg-avatar"><img src="${imgUrl(lgChamp.key)}" alt="${esc(lgChamp.name)}" /></div>`
             : `<div class="lg-avatar empty">?</div>`;
 
         return `
         <div class="lg-row dimmed" id="lg-row-${p.id}">
             <input type="checkbox" class="lg-check" id="lg-check-${p.id}"
                 onchange="toggleLgRow(${p.id})" />
-            ${avatar}
+            <button class="lg-champ-btn" id="lg-champ-btn-${p.id}"
+                onclick="openLgChampPicker(${p.id}, this)"
+                title="${lgChamp ? esc(lgChamp.name) : 'Pick champion'}"
+                style="width:34px;height:34px;border-radius:50%;background:none;border:none;padding:0">
+                ${champInner}
+            </button>
             <span class="lg-name">${esc(p.name)}</span>
             <div class="lg-controls">
                 <button class="lg-wl w" id="lg-w-${p.id}" onclick="setLgResult(${p.id},'W')">W</button>
@@ -1372,7 +1493,8 @@ async function submitGame() {
     const errEl = document.getElementById('lg-err');
     errEl.textContent = '';
 
-    const updates = [];
+    const updates  = [];
+    const histRows = [];
     for (const p of players) {
         const checkbox = document.getElementById(`lg-check-${p.id}`);
         if (!checkbox?.checked) continue;
@@ -1388,6 +1510,7 @@ async function submitGame() {
         const d   = Math.max(0, parseInt(document.getElementById(`lg-d-${p.id}`).value)   || 0);
         const a   = Math.max(0, parseInt(document.getElementById(`lg-a-${p.id}`).value)   || 0);
         const dmg = Math.max(0, parseInt(document.getElementById(`lg-dmg-${p.id}`).value) || 0);
+        const lgC = lgChamps.get(p.id) || null;
 
         updates.push(
             db.from('players').update({
@@ -1399,6 +1522,14 @@ async function submitGame() {
                 damage:  p.damage  + dmg,
             }).eq('id', p.id)
         );
+
+        histRows.push({
+            player_id:  p.id,
+            result:     wActive ? 'W' : 'L',
+            kills:      k, deaths: d, assists: a, damage: dmg,
+            champ_key:  lgC?.key  || null,
+            champ_name: lgC?.name || null,
+        });
     }
 
     if (!updates.length) { errEl.textContent = 'Check at least one player.'; return; }
@@ -1407,7 +1538,109 @@ async function submitGame() {
     const failed  = results.find(r => r.error);
     if (failed) { console.error(failed.error); errEl.textContent = 'Save failed. Check console.'; return; }
 
+    if (histRows.length) {
+        const { error: hErr } = await db.from('match_history').insert(histRows);
+        if (hErr) console.error('History insert error:', hErr.message);
+        histRows.forEach(r => historyCache.delete(r.player_id));
+    }
+
     closeLogGame();
+}
+
+// ── Match History ─────────────────────────────────────
+function fmtDate(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function toggleHistory(id) {
+    const playerRow = document.getElementById(`player-row-${id}`);
+    if (!playerRow) return;
+
+    if (expandedPlayers.has(id)) {
+        // Collapse
+        expandedPlayers.delete(id);
+        const histRow = document.getElementById(`history-row-${id}`);
+        if (histRow) histRow.remove();
+        const toggle = playerRow.querySelector('.history-toggle');
+        if (toggle) toggle.textContent = '▾';
+    } else {
+        // Expand
+        expandedPlayers.add(id);
+        const toggle = playerRow.querySelector('.history-toggle');
+        if (toggle) toggle.textContent = '▴';
+        const cached = historyCache.get(id);
+        if (cached) insertHistoryRow(id, cached);
+        else fetchAndShowHistory(id);
+    }
+}
+
+async function fetchAndShowHistory(id) {
+    // Show loading placeholder
+    const playerRow = document.getElementById(`player-row-${id}`);
+    if (!playerRow) return;
+    let histRow = document.getElementById(`history-row-${id}`);
+    if (!histRow) {
+        histRow = document.createElement('tr');
+        histRow.id = `history-row-${id}`;
+        histRow.className = 'history-row';
+        histRow.innerHTML = `<td colspan="9"><div class="history-panel"><span class="history-loading">Loading…</span></div></td>`;
+        playerRow.insertAdjacentElement('afterend', histRow);
+    }
+
+    const { data, error } = await db
+        .from('match_history')
+        .select('*')
+        .eq('player_id', id)
+        .order('played_at', { ascending: false })
+        .limit(5);
+
+    if (!expandedPlayers.has(id)) return; // closed while loading
+
+    if (error) {
+        console.error('History fetch error:', error.message);
+        histRow.innerHTML = `<td colspan="9"><div class="history-panel"><span class="history-empty">Could not load history.</span></div></td>`;
+        return;
+    }
+
+    historyCache.set(id, data || []);
+    insertHistoryRow(id, data || []);
+}
+
+function insertHistoryRow(pid, games) {
+    const playerRow = document.getElementById(`player-row-${pid}`);
+    if (!playerRow) return;
+
+    // Remove existing history row if present
+    const existing = document.getElementById(`history-row-${pid}`);
+    if (existing) existing.remove();
+
+    const histRow = document.createElement('tr');
+    histRow.id = `history-row-${pid}`;
+    histRow.className = 'history-row';
+
+    if (!games.length) {
+        histRow.innerHTML = `<td colspan="9"><div class="history-panel"><span class="history-empty">No games logged yet.</span></div></td>`;
+    } else {
+        const cards = games.map(g => {
+            const isWin = g.result === 'W';
+            const champImg = g.champ_key
+                ? `<img class="game-champ" src="${imgUrl(g.champ_key)}" alt="${esc(g.champ_name || '')}" />`
+                : `<div class="game-champ-empty">?</div>`;
+            const kda = g.kills !== null ? `${g.kills}/${g.deaths}/${g.assists}` : '';
+            const dmg = g.damage ? Math.round(g.damage).toLocaleString() : '';
+            return `<div class="game-card ${isWin ? 'win' : 'loss'}">
+                ${champImg}
+                <div class="game-badge ${isWin ? 'win' : 'loss'}">${g.result}</div>
+                ${kda ? `<div class="game-kda">${kda}</div>` : ''}
+                ${dmg ? `<div class="game-dmg">${dmg}</div>` : ''}
+                <div class="game-date">${fmtDate(g.played_at)}</div>
+            </div>`;
+        }).join('');
+        histRow.innerHTML = `<td colspan="9"><div class="history-panel">${cards}</div></td>`;
+    }
+
+    playerRow.insertAdjacentElement('afterend', histRow);
 }
 
 // ── Admin System ──────────────────────────────────────
