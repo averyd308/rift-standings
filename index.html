@@ -688,6 +688,16 @@
         .game-dmg  { color: #5a6a8a; font-size: 0.62rem; }
         .game-date { color: #2a3a5a; font-size: 0.58rem; }
 
+        .game-del {
+            display: none;
+            background: rgba(120,20,20,0.5); border: 1px solid #6a1a1a;
+            color: #e05050; font-size: 0.55rem; padding: 2px 6px;
+            border-radius: 2px; cursor: pointer; margin-top: 2px;
+            transition: background 0.15s;
+        }
+        .game-del:hover { background: rgba(180,30,30,0.75); }
+        body.admin-mode .game-del { display: block; }
+
         /* Log game per-player champion button */
         .lg-champ-btn {
             cursor: pointer; flex-shrink: 0; transition: opacity 0.15s;
@@ -1637,12 +1647,21 @@ function insertHistoryRow(pid, games) {
                 ${kda ? `<div class="game-kda">${kda}</div>` : ''}
                 ${dmg ? `<div class="game-dmg">${dmg}</div>` : ''}
                 <div class="game-date">${fmtDate(g.played_at)}</div>
+                <button class="game-del" onclick="deleteHistoryEntry(${g.id},${pid})">✕ Del</button>
             </div>`;
         }).join('');
         histRow.innerHTML = `<td colspan="9"><div class="history-panel">${cards}</div></td>`;
     }
 
     playerRow.insertAdjacentElement('afterend', histRow);
+}
+
+async function deleteHistoryEntry(entryId, pid) {
+    if (!confirm('Delete this game from history?')) return;
+    const { error } = await db.from('match_history').delete().eq('id', entryId);
+    if (error) { console.error(error); return; }
+    historyCache.delete(pid);
+    fetchAndShowHistory(pid);
 }
 
 // ── Admin System ──────────────────────────────────────
