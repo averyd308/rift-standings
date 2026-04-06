@@ -507,6 +507,86 @@
         /* Hide admin-only table columns when not admin */
         body:not(.admin-mode) .admin-col { display: none; }
 
+        /* ── Log Game Modal ─────────────────────── */
+        #log-modal .modal { max-width: 700px !important; width: 95vw; }
+
+        .lg-players {
+            max-height: 55vh; overflow-y: auto;
+            margin: 0 -8px 20px; padding: 0 8px;
+        }
+        .lg-players::-webkit-scrollbar { width: 5px; }
+        .lg-players::-webkit-scrollbar-thumb { background: #2a3a5a; border-radius: 3px; }
+
+        .lg-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(26,40,64,0.5);
+            transition: opacity 0.15s;
+        }
+        .lg-row:last-child { border-bottom: none; }
+        .lg-row.dimmed { opacity: 0.3; }
+        .lg-row.dimmed .lg-controls { pointer-events: none; }
+
+        .lg-check {
+            width: 16px; height: 16px; flex-shrink: 0;
+            cursor: pointer; accent-color: #c8a96e;
+        }
+
+        .lg-avatar {
+            width: 34px; height: 34px; border-radius: 50%;
+            padding: 2px; flex-shrink: 0;
+            background: linear-gradient(135deg, #c8a96e, #5a3a10, #c8a96e);
+        }
+        .lg-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+        .lg-avatar.empty {
+            border: 2px dashed #1a2840;
+            padding: 0; display: flex; align-items: center;
+            justify-content: center; color: #2a3a5a; font-size: 0.9rem;
+            background: none;
+        }
+
+        .lg-name { flex: 1; min-width: 80px; font-weight: 600; color: #dfc080; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .lg-controls { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+
+        .lg-wl {
+            width: 28px; height: 28px; border-radius: 3px; border: none;
+            cursor: pointer; font-weight: 800; font-size: 0.72rem; transition: all 0.15s;
+        }
+        .lg-wl.w          { background: rgba(38,95,52,0.25); color: #2a5a3a; border: 1px solid rgba(38,95,52,0.4); }
+        .lg-wl.w.active   { background: rgba(38,95,52,0.9);  color: #50e070; }
+        .lg-wl.l          { background: rgba(95,28,28,0.25); color: #5a2a2a; border: 1px solid rgba(95,28,28,0.4); }
+        .lg-wl.l.active   { background: rgba(95,28,28,0.9);  color: #e05050; }
+
+        .lg-sep { width: 1px; height: 20px; background: #1a2840; margin: 0 2px; }
+
+        .lg-input {
+            width: 46px; padding: 5px 3px; text-align: center;
+            background: rgba(0,0,0,0.4); border: 1px solid #1a2840;
+            color: #c8a96e; border-radius: 3px; font-size: 0.78rem; outline: none;
+        }
+        .lg-input:focus { border-color: #c8a96e; }
+        .lg-input::placeholder { color: #2a3a5a; font-size: 0.65rem; }
+        .lg-input.wide { width: 70px; }
+
+        .lg-input-label {
+            font-size: 0.55rem; color: #3a4a6a; text-align: center;
+            letter-spacing: 1px; text-transform: uppercase; margin-top: 2px;
+        }
+
+        .lg-field { display: flex; flex-direction: column; }
+
+        .lg-err {
+            color: #e05050; font-size: 0.75rem; text-align: center;
+            min-height: 18px; margin-bottom: 10px; letter-spacing: 1px;
+        }
+
+        @media (max-width: 580px) {
+            .lg-controls { flex-wrap: wrap; justify-content: flex-end; }
+            .lg-input { width: 38px; }
+            .lg-input.wide { width: 58px; }
+        }
+
         /* Admin password modal */
         #admin-modal .modal { max-width: 360px; }
         .admin-modal-icon { text-align: center; font-size: 2rem; margin-bottom: 6px; }
@@ -557,7 +637,10 @@
     </div>
 
     <div class="card">
-        <div class="card-title">🏆 Standings</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div class="card-title" style="margin-bottom:0">🏆 Standings</div>
+            <button class="btn btn-gold btn-sm admin-col" onclick="openLogGame()">⚔ Log Game</button>
+        </div>
         <table>
             <thead>
                 <tr>
@@ -631,6 +714,19 @@
         <div class="modal-actions">
             <button class="btn-ghost" onclick="closeModal()">Cancel</button>
             <button class="btn btn-gold" onclick="saveModal()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Log Game Modal -->
+<div class="overlay" id="log-modal">
+    <div class="modal">
+        <h3>⚔ Log Game Result</h3>
+        <div class="lg-err" id="lg-err"></div>
+        <div class="lg-players" id="lg-players"></div>
+        <div class="modal-actions">
+            <button class="btn-ghost" onclick="closeLogGame()">Cancel</button>
+            <button class="btn btn-gold" onclick="submitGame()">Submit</button>
         </div>
     </div>
 </div>
@@ -1133,6 +1229,114 @@ function esc(s) {
 }
 
 loadPlayers();
+
+// ── Log Game ──────────────────────────────────────────
+function openLogGame() {
+    document.getElementById('lg-err').textContent = '';
+    buildLogRows();
+    document.getElementById('log-modal').classList.add('active');
+}
+
+function closeLogGame() {
+    document.getElementById('log-modal').classList.remove('active');
+}
+
+document.getElementById('log-modal').addEventListener('click', function(e) { if (e.target === this) closeLogGame(); });
+
+function buildLogRows() {
+    const container = document.getElementById('lg-players');
+    if (!players.length) {
+        container.innerHTML = `<div class="empty-state">No summoners added yet.</div>`;
+        return;
+    }
+
+    container.innerHTML = players.map(p => {
+        const avatar = p.champKey
+            ? `<div class="lg-avatar"><img src="${imgUrl(p.champKey)}" alt="${esc(p.champName)}" /></div>`
+            : `<div class="lg-avatar empty">?</div>`;
+
+        return `
+        <div class="lg-row dimmed" id="lg-row-${p.id}">
+            <input type="checkbox" class="lg-check" id="lg-check-${p.id}"
+                onchange="toggleLgRow(${p.id})" />
+            ${avatar}
+            <span class="lg-name">${esc(p.name)}</span>
+            <div class="lg-controls">
+                <button class="lg-wl w" id="lg-w-${p.id}" onclick="setLgResult(${p.id},'W')">W</button>
+                <button class="lg-wl l" id="lg-l-${p.id}" onclick="setLgResult(${p.id},'L')">L</button>
+                <div class="lg-sep"></div>
+                <div class="lg-field">
+                    <input class="lg-input" id="lg-k-${p.id}" type="number" min="0" placeholder="K">
+                    <div class="lg-input-label">K</div>
+                </div>
+                <div class="lg-field">
+                    <input class="lg-input" id="lg-d-${p.id}" type="number" min="0" placeholder="D">
+                    <div class="lg-input-label">D</div>
+                </div>
+                <div class="lg-field">
+                    <input class="lg-input" id="lg-a-${p.id}" type="number" min="0" placeholder="A">
+                    <div class="lg-input-label">A</div>
+                </div>
+                <div class="lg-field">
+                    <input class="lg-input wide" id="lg-dmg-${p.id}" type="number" min="0" placeholder="DMG">
+                    <div class="lg-input-label">DMG</div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleLgRow(id) {
+    const checked = document.getElementById(`lg-check-${id}`).checked;
+    document.getElementById(`lg-row-${id}`).classList.toggle('dimmed', !checked);
+}
+
+function setLgResult(id, result) {
+    document.getElementById(`lg-w-${id}`).classList.toggle('active', result === 'W');
+    document.getElementById(`lg-l-${id}`).classList.toggle('active', result === 'L');
+}
+
+async function submitGame() {
+    const errEl = document.getElementById('lg-err');
+    errEl.textContent = '';
+
+    const updates = [];
+    for (const p of players) {
+        const checkbox = document.getElementById(`lg-check-${p.id}`);
+        if (!checkbox?.checked) continue;
+
+        const wActive = document.getElementById(`lg-w-${p.id}`).classList.contains('active');
+        const lActive = document.getElementById(`lg-l-${p.id}`).classList.contains('active');
+        if (!wActive && !lActive) {
+            errEl.textContent = `Select W or L for ${p.name}.`;
+            return;
+        }
+
+        const k   = Math.max(0, parseInt(document.getElementById(`lg-k-${p.id}`).value)   || 0);
+        const d   = Math.max(0, parseInt(document.getElementById(`lg-d-${p.id}`).value)   || 0);
+        const a   = Math.max(0, parseInt(document.getElementById(`lg-a-${p.id}`).value)   || 0);
+        const dmg = Math.max(0, parseInt(document.getElementById(`lg-dmg-${p.id}`).value) || 0);
+
+        updates.push(
+            db.from('players').update({
+                wins:    p.wins    + (wActive ? 1 : 0),
+                losses:  p.losses  + (lActive ? 1 : 0),
+                kills:   p.kills   + k,
+                deaths:  p.deaths  + d,
+                assists: p.assists + a,
+                damage:  p.damage  + dmg,
+            }).eq('id', p.id)
+        );
+    }
+
+    if (!updates.length) { errEl.textContent = 'Check at least one player.'; return; }
+
+    const results = await Promise.all(updates);
+    const failed  = results.find(r => r.error);
+    if (failed) { console.error(failed.error); errEl.textContent = 'Save failed. Check console.'; return; }
+
+    closeLogGame();
+}
 
 // ── Admin System ──────────────────────────────────────
 const HASH_KEY    = 'lol-admin-hash';
