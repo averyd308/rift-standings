@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rift Standings</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #080e1c;
+            color: #c8a96e;
+            font-family: 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        #stars-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 30px 20px 80px;
+        }
+
+        /* ── Header ─────────────────────────────── */
+        .header { text-align: center; margin-bottom: 36px; }
+        .header h1 {
+            font-size: clamp(1.8rem, 5vw, 3rem);
+            color: #c8a96e;
+            text-shadow: 0 0 18px rgba(200,169,110,0.9), 0 0 60px rgba(200,169,110,0.3);
+            letter-spacing: 5px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+        .header p {
+            color: #4a4030;
+            margin-top: 8px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            font-size: 0.72rem;
+        }
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #c8a96e 20%, #c8a96e 80%, transparent);
+            margin: 18px 0 0;
+            opacity: 0.5;
+        }
+
+        /* ── Cards ──────────────────────────────── */
+        .card {
+            background: rgba(8,16,32,0.88);
+            border: 1px solid #1a2840;
+            border-radius: 4px;
+            padding: 24px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(14px);
+            box-shadow: 0 6px 30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(200,169,110,0.07);
+        }
+        .card-title {
+            font-size: 0.68rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #5a5040;
+            margin-bottom: 16px;
+        }
+
+        /* ── Form ───────────────────────────────── */
+        .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+
+        input[type="text"] {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #1a2840;
+            color: #c8a96e;
+            padding: 10px 14px;
+            border-radius: 3px;
+            font-size: 0.92rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            flex: 1;
+            min-width: 140px;
+        }
+        input[type="text"]::placeholder { color: #2a3a5a; }
+        input[type="text"]:focus {
+            border-color: #c8a96e;
+            box-shadow: 0 0 0 2px rgba(200,169,110,0.1);
+        }
+
+        /* ── Champion Picker ────────────────────── */
+        .champ-picker {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .picker-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #1a2840;
+            color: #c8a96e;
+            padding: 6px 12px 6px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            height: 100%;
+            min-height: 42px;
+            user-select: none;
+        }
+        .picker-btn:hover, .picker-btn.open { border-color: #c8a96e; }
+
+        .picker-thumb {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #c8a96e;
+            object-fit: cover;
+            background: #0a1428;
+            flex-shrink: 0;
+        }
+        .picker-thumb.placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            color: #3a4a6a;
+        }
+
+        .picker-label {
+            font-size: 0.85rem;
+            max-width: 110px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .picker-arrow { font-size: 0.6rem; color: #5a6a8a; margin-left: 2px; }
+
+        .picker-dropdown {
+            display: none;
+            position: fixed;
+            background: #0c1828;
+            border: 1px solid #c8a96e;
+            border-radius: 4px;
+            z-index: 9999;
+            width: 340px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+        .picker-dropdown.open { display: block; }
+
+        .picker-search {
+            width: 100%;
+            background: rgba(0,0,0,0.6);
+            border: none;
+            border-bottom: 1px solid #1a2840;
+            color: #c8a96e;
+            padding: 10px 14px;
+            font-size: 0.88rem;
+            outline: none;
+            border-radius: 4px 4px 0 0;
+        }
+        .picker-search::placeholder { color: #3a4a6a; }
+
+        .picker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+            gap: 4px;
+            padding: 10px;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .picker-grid::-webkit-scrollbar { width: 6px; }
+        .picker-grid::-webkit-scrollbar-track { background: transparent; }
+        .picker-grid::-webkit-scrollbar-thumb { background: #2a3a5a; border-radius: 3px; }
+
+        .champ-option {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            padding: 5px 3px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+        .champ-option:hover { background: rgba(200,169,110,0.1); }
+        .champ-option.selected { background: rgba(200,169,110,0.18); outline: 1px solid #c8a96e; }
+
+        .champ-option img {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 2px solid #1a2840;
+            object-fit: cover;
+            transition: border-color 0.12s;
+        }
+        .champ-option:hover img, .champ-option.selected img { border-color: #c8a96e; }
+
+        .champ-option span {
+            font-size: 0.55rem;
+            color: #7a8aaa;
+            text-align: center;
+            line-height: 1.2;
+            max-width: 52px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .champ-option.selected span { color: #c8a96e; }
+
+        .no-champ-opt {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            padding: 5px 3px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+        .no-champ-opt:hover { background: rgba(200,169,110,0.1); }
+        .no-champ-opt.selected { background: rgba(200,169,110,0.18); outline: 1px solid #c8a96e; }
+        .no-champ-opt .no-icon {
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            border: 2px dashed #2a3a5a;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem;
+            color: #3a4a6a;
+        }
+        .no-champ-opt span { font-size: 0.55rem; color: #5a6a8a; }
+
+        /* ── Buttons ─────────────────────────────── */
+        .btn {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            transition: all 0.18s;
+            white-space: nowrap;
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, #c8a96e, #8a6030);
+            color: #060d1a;
+        }
+        .btn-gold:hover {
+            background: linear-gradient(135deg, #e0c484, #c8a96e);
+            box-shadow: 0 0 18px rgba(200,169,110,0.45);
+            transform: translateY(-1px);
+        }
+        .btn-sm { padding: 6px 14px; font-size: 0.7rem; }
+
+        /* ── Table ───────────────────────────────── */
+        table { width: 100%; border-collapse: collapse; }
+
+        thead th {
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 0.62rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #3a4a6a;
+            border-bottom: 1px solid #1a2840;
+        }
+        thead th.center { text-align: center; }
+
+        tbody tr {
+            border-bottom: 1px solid rgba(26,40,64,0.5);
+            transition: background 0.15s;
+        }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(200,169,110,0.04); }
+
+        td { padding: 11px 14px; vertical-align: middle; }
+        td.center { text-align: center; }
+
+        /* Champion portrait in table */
+        .avatar-wrap {
+            flex-shrink: 0;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            padding: 2px;
+            background: linear-gradient(135deg, #c8a96e, #5a3a10, #c8a96e);
+        }
+        .avatar-wrap img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .name-cell { display: flex; align-items: center; gap: 12px; }
+        .player-name { font-weight: 700; color: #dfc080; font-size: 0.95rem; }
+        .champ-sub { font-size: 0.68rem; color: #4a5a7a; margin-top: 2px; }
+
+        .wins   { color: #50e070; font-weight: 700; }
+        .losses { color: #e05050; font-weight: 700; }
+
+        .wr-val { font-weight: 700; font-size: 0.88rem; }
+        .wr-bar {
+            width: 60px; height: 3px;
+            background: rgba(255,255,255,0.07);
+            border-radius: 2px;
+            margin: 5px auto 0;
+            overflow: hidden;
+        }
+        .wr-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+
+        .qbtn {
+            display: inline-flex;
+            align-items: center; justify-content: center;
+            width: 30px; height: 30px;
+            border: none; border-radius: 3px;
+            cursor: pointer; font-weight: 800; font-size: 0.75rem;
+            transition: all 0.15s;
+        }
+        .qbtn.w { background: rgba(38,95,52,0.55); color: #50e070; border: 1px solid rgba(38,95,52,0.9); }
+        .qbtn.w:hover { background: rgba(38,95,52,0.95); transform: scale(1.12); }
+        .qbtn.l { background: rgba(95,28,28,0.55); color: #e05050; border: 1px solid rgba(95,28,28,0.9); }
+        .qbtn.l:hover { background: rgba(95,28,28,0.95); transform: scale(1.12); }
+
+        .del-btn {
+            background: rgba(120,20,20,0.4);
+            border: 1px solid #6a1a1a;
+            color: #e05050;
+            font-size: 0.72rem;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-weight: 700;
+        }
+        .del-btn:hover { background: rgba(180,30,30,0.6); color: #ff7070; border-color: #aa3030; box-shadow: 0 0 8px rgba(220,50,50,0.3); }
+
+        .row-actions { display: flex; gap: 6px; align-items: center; justify-content: center; }
+
+        .rank-col { width: 44px; font-size: 1.1rem; }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #2a3a5a;
+            font-size: 0.82rem;
+            letter-spacing: 2px;
+        }
+
+        /* ── Modal ───────────────────────────────── */
+        .overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.78);
+            z-index: 600;
+            align-items: center; justify-content: center;
+        }
+        .overlay.active { display: flex; }
+
+        .modal {
+            background: #0a1422;
+            border: 1px solid #c8a96e;
+            border-radius: 5px;
+            padding: 32px;
+            width: 90%; max-width: 400px;
+            box-shadow: 0 0 60px rgba(200,169,110,0.15), 0 20px 60px rgba(0,0,0,0.8);
+        }
+        .modal h3 {
+            font-size: 0.68rem; letter-spacing: 3px;
+            color: #5a5040; text-transform: uppercase; margin-bottom: 22px;
+        }
+        .modal-player { text-align: center; margin-bottom: 26px; }
+        .modal-avatar-wrap {
+            position: relative;
+            width: 72px; height: 72px;
+            border-radius: 50%;
+            padding: 2px;
+            background: linear-gradient(135deg, #c8a96e, #5a3a10, #c8a96e);
+            margin: 0 auto 10px;
+            cursor: pointer;
+        }
+        .modal-avatar {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            display: block;
+            background: #0a1422;
+        }
+        .modal-avatar-overlay {
+            position: absolute; inset: 2px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.65);
+            display: flex; align-items: center; justify-content: center;
+            color: #c8a96e; font-size: 0.6rem; letter-spacing: 1px;
+            text-transform: uppercase; font-weight: 700;
+            opacity: 0; transition: opacity 0.18s;
+            pointer-events: none;
+        }
+        .modal-avatar-wrap:hover .modal-avatar-overlay { opacity: 1; }
+        .modal-player .mname { color: #dfc080; font-size: 1.05rem; font-weight: 700; display: block; }
+        .modal-player .msub  { color: #4a5a7a; font-size: 0.75rem; margin-top: 3px; display: block; }
+
+        .modal-fields { display: flex; gap: 14px; margin-bottom: 26px; }
+        .field { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+        .field label { font-size: 0.62rem; letter-spacing: 3px; text-transform: uppercase; color: #3a4a6a; }
+        .field input {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #1a2840;
+            color: #c8a96e;
+            padding: 10px;
+            border-radius: 3px;
+            font-size: 1.1rem;
+            text-align: center;
+            outline: none; width: 100%;
+        }
+        .field input:focus { border-color: #c8a96e; }
+
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid #1a2840;
+            color: #4a5a7a;
+            padding: 9px 18px; border-radius: 3px;
+            cursor: pointer; font-size: 0.72rem;
+            letter-spacing: 2px; text-transform: uppercase;
+            transition: all 0.18s;
+        }
+        .btn-ghost:hover { border-color: #c8a96e; color: #c8a96e; }
+
+        @media (max-width: 600px) {
+            td, th { padding: 9px 7px; }
+            .wr-bar { width: 42px; }
+            .picker-dropdown { width: calc(100vw - 20px); }
+        }
+
+        /* ── Admin ───────────────────────────────── */
+        .admin-controls {
+            position: fixed;
+            top: 14px; right: 16px;
+            z-index: 50;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .admin-badge {
+            font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase;
+            color: #c8a96e; background: rgba(200,169,110,0.1);
+            border: 1px solid rgba(200,169,110,0.35);
+            padding: 4px 10px; border-radius: 2px;
+            display: none;
+        }
+        body.admin-mode .admin-badge { display: inline-block; }
+
+        .btn-admin {
+            background: transparent;
+            border: 1px solid #1a2840;
+            color: #4a5a7a;
+            padding: 7px 14px; border-radius: 3px;
+            cursor: pointer; font-size: 0.68rem;
+            letter-spacing: 2px; text-transform: uppercase;
+            transition: all 0.18s;
+        }
+        .btn-admin:hover { border-color: #c8a96e; color: #c8a96e; }
+        body.admin-mode .btn-admin { border-color: rgba(200,169,110,0.4); color: #7a6a4a; }
+        body.admin-mode .btn-admin:hover { color: #e05050; border-color: #e05050; }
+
+        /* Hide admin-only table columns when not admin */
+        body:not(.admin-mode) .admin-col { display: none; }
+
+        /* Admin password modal */
+        #admin-modal .modal { max-width: 360px; }
+        .admin-modal-icon { text-align: center; font-size: 2rem; margin-bottom: 6px; }
+        .admin-modal-err {
+            color: #e05050; font-size: 0.75rem; text-align: center;
+            margin-top: -8px; margin-bottom: 12px; min-height: 18px;
+            letter-spacing: 1px;
+        }
+        .admin-setup-note {
+            font-size: 0.72rem; color: #4a5a7a; text-align: center;
+            margin-bottom: 16px; line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="stars-canvas"></canvas>
+
+<!-- Admin controls (top-right) -->
+<div class="admin-controls">
+    <span class="admin-badge">🔓 Admin</span>
+    <button class="btn-admin" id="admin-toggle-btn" onclick="openAdminModal()">🔒 Admin</button>
+</div>
+
+<div class="container">
+    <div class="header">
+        <h1>⚔ Rift Standings ⚔</h1>
+        <p>Custom Game Records</p>
+        <div class="divider"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">+ Add Summoner</div>
+        <div class="form-row">
+            <input type="text" id="player-name" placeholder="Summoner name..." />
+
+            <!-- Custom champion image picker -->
+            <div class="champ-picker" id="champ-picker">
+                <div class="picker-btn" id="picker-btn" onclick="togglePicker()">
+                    <div class="picker-thumb placeholder" id="picker-thumb-wrap">?</div>
+                    <span class="picker-label" id="picker-label">Pick Champion</span>
+                    <span class="picker-arrow">▾</span>
+                </div>
+            </div>
+
+            <button class="btn btn-gold" onclick="addPlayer()">Add</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">🏆 Standings</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Summoner</th>
+                    <th class="center">W</th>
+                    <th class="center">L</th>
+                    <th class="center">Win%</th>
+                    <th class="center admin-col">Record</th>
+                    <th class="center admin-col"></th>
+                </tr>
+            </thead>
+            <tbody id="standings-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Champion Picker Dropdown (body-level to escape stacking contexts) -->
+<div class="picker-dropdown" id="picker-dropdown">
+    <input class="picker-search" id="picker-search" type="text" placeholder="Search champion..." oninput="filterPicker()" autocomplete="off" />
+    <div class="picker-grid" id="picker-grid"></div>
+</div>
+
+<!-- Edit Modal -->
+<div class="overlay" id="modal">
+    <div class="modal">
+        <h3>Edit Record</h3>
+        <div class="modal-player">
+            <div class="modal-avatar-wrap" onclick="openModalPicker()" title="Click to change champion">
+                <img class="modal-avatar" id="m-avatar" src="" alt="" />
+                <div class="modal-avatar-overlay">Change</div>
+            </div>
+            <span class="mname" id="m-name"></span>
+            <span class="msub" id="m-champ"></span>
+        </div>
+        <div class="modal-fields">
+            <div class="field">
+                <label>Wins</label>
+                <input type="number" id="m-wins" min="0" />
+            </div>
+            <div class="field">
+                <label>Losses</label>
+                <input type="number" id="m-losses" min="0" />
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-gold" onclick="saveModal()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Admin Modal -->
+<div class="overlay" id="admin-modal">
+    <div class="modal">
+        <div class="admin-modal-icon" id="admin-modal-icon">🔒</div>
+        <h3 id="admin-modal-title" style="text-align:center">Admin Login</h3>
+        <p class="admin-setup-note" id="admin-setup-note"></p>
+        <div class="admin-modal-err" id="admin-err"></div>
+        <div class="modal-fields" id="admin-fields">
+            <div class="field">
+                <label id="admin-pass-label">Password</label>
+                <input type="password" id="admin-pass" autocomplete="off" />
+            </div>
+            <div class="field" id="admin-confirm-wrap" style="display:none">
+                <label>Confirm</label>
+                <input type="password" id="admin-confirm" autocomplete="off" />
+            </div>
+        </div>
+        <div class="modal-actions" id="admin-actions">
+            <button class="btn-ghost" onclick="closeAdminModal()">Cancel</button>
+            <button class="btn btn-gold" id="admin-submit-btn" onclick="adminSubmit()">Login</button>
+        </div>
+        <!-- Shown only when already logged in -->
+        <div id="admin-logout-view" style="display:none">
+            <p style="text-align:center;color:#7a6a4a;font-size:0.8rem;margin-bottom:20px">You are logged in as admin.</p>
+            <div class="modal-actions" style="flex-direction:column;gap:8px">
+                <button class="btn btn-gold" onclick="closeAdminModal()">Close</button>
+                <button class="btn-ghost" onclick="adminChangePassword()">Change Password</button>
+                <button class="btn-ghost" style="color:#e05050;border-color:#3a1a1a" onclick="adminLogout()">Logout</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+'use strict';
+
+// ── Stars ────────────────────────────────────────────
+const canvas = document.getElementById('stars-canvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() { canvas.width = innerWidth; canvas.height = innerHeight; }
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const STARS = Array.from({ length: 260 }, () => ({
+    x: Math.random(), y: Math.random(),
+    r: Math.random() * 1.6 + 0.2,
+    phase: Math.random() * Math.PI * 2,
+    speed: Math.random() * 0.5 + 0.15,
+    gold: Math.random() < 0.12
+}));
+const shoots = [];
+let lastT = 0;
+
+function drawStars(t) {
+    const dt = (t - lastT) / 1000;
+    lastT = t;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const s of STARS) {
+        s.phase += dt * s.speed;
+        const a = 0.2 + 0.75 * ((Math.sin(s.phase) + 1) / 2);
+        ctx.beginPath();
+        ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = s.gold ? `rgba(220,190,120,${a})` : `rgba(170,185,225,${a})`;
+        ctx.fill();
+    }
+    if (Math.random() < 0.004) {
+        shoots.push({ x: Math.random() * 0.6, y: Math.random() * 0.4, vx: 0.004 + Math.random() * 0.003, vy: 0.002 + Math.random() * 0.002, life: 1 });
+    }
+    for (let i = shoots.length - 1; i >= 0; i--) {
+        const sh = shoots[i];
+        sh.x += sh.vx; sh.y += sh.vy; sh.life -= dt * 1.4;
+        if (sh.life <= 0 || sh.x > 1.1) { shoots.splice(i, 1); continue; }
+        const g = ctx.createLinearGradient(
+            (sh.x - sh.vx * 28) * canvas.width, (sh.y - sh.vy * 28) * canvas.height,
+            sh.x * canvas.width, sh.y * canvas.height
+        );
+        g.addColorStop(0, 'rgba(200,180,120,0)');
+        g.addColorStop(1, `rgba(220,205,155,${sh.life * 0.75})`);
+        ctx.beginPath();
+        ctx.moveTo((sh.x - sh.vx * 28) * canvas.width, (sh.y - sh.vy * 28) * canvas.height);
+        ctx.lineTo(sh.x * canvas.width, sh.y * canvas.height);
+        ctx.strokeStyle = g; ctx.lineWidth = 1.4; ctx.stroke();
+    }
+    requestAnimationFrame(drawStars);
+}
+requestAnimationFrame(drawStars);
+
+// ── Data Dragon ──────────────────────────────────────
+const VERSION = '16.7.1';
+const CDN = `https://ddragon.leagueoflegends.com/cdn/${VERSION}/img/champion/`;
+
+function imgUrl(key) { return key ? `${CDN}${key}.png` : ''; }
+
+const CHAMPS = [
+    {key:'Aatrox',name:'Aatrox'},{key:'Ahri',name:'Ahri'},{key:'Akali',name:'Akali'},
+    {key:'Akshan',name:'Akshan'},{key:'Alistar',name:'Alistar'},{key:'Ambessa',name:'Ambessa'},
+    {key:'Amumu',name:'Amumu'},{key:'Anivia',name:'Anivia'},{key:'Annie',name:'Annie'},
+    {key:'Aphelios',name:'Aphelios'},{key:'Ashe',name:'Ashe'},{key:'AurelionSol',name:'Aurelion Sol'},
+    {key:'Aurora',name:'Aurora'},{key:'Azir',name:'Azir'},{key:'Bard',name:'Bard'},
+    {key:'Belveth',name:"Bel'Veth"},{key:'Blitzcrank',name:'Blitzcrank'},{key:'Brand',name:'Brand'},
+    {key:'Braum',name:'Braum'},{key:'Briar',name:'Briar'},{key:'Caitlyn',name:'Caitlyn'},
+    {key:'Camille',name:'Camille'},{key:'Cassiopeia',name:'Cassiopeia'},{key:'Chogath',name:"Cho'Gath"},
+    {key:'Corki',name:'Corki'},{key:'Darius',name:'Darius'},{key:'Diana',name:'Diana'},
+    {key:'Draven',name:'Draven'},{key:'DrMundo',name:'Dr. Mundo'},{key:'Ekko',name:'Ekko'},
+    {key:'Elise',name:'Elise'},{key:'Evelynn',name:'Evelynn'},{key:'Ezreal',name:'Ezreal'},
+    {key:'Fiddlesticks',name:'Fiddlesticks'},{key:'Fiora',name:'Fiora'},{key:'Fizz',name:'Fizz'},
+    {key:'Galio',name:'Galio'},{key:'Gangplank',name:'Gangplank'},{key:'Garen',name:'Garen'},
+    {key:'Gnar',name:'Gnar'},{key:'Gragas',name:'Gragas'},{key:'Graves',name:'Graves'},
+    {key:'Gwen',name:'Gwen'},{key:'Hecarim',name:'Hecarim'},{key:'Heimerdinger',name:'Heimerdinger'},
+    {key:'Hwei',name:'Hwei'},{key:'Illaoi',name:'Illaoi'},{key:'Irelia',name:'Irelia'},
+    {key:'Ivern',name:'Ivern'},{key:'Janna',name:'Janna'},{key:'JarvanIV',name:'Jarvan IV'},
+    {key:'Jax',name:'Jax'},{key:'Jayce',name:'Jayce'},{key:'Jhin',name:'Jhin'},
+    {key:'Jinx',name:'Jinx'},{key:'Kaisa',name:"Kai'Sa"},{key:'Kalista',name:'Kalista'},
+    {key:'Karma',name:'Karma'},{key:'Karthus',name:'Karthus'},{key:'Kassadin',name:'Kassadin'},
+    {key:'Katarina',name:'Katarina'},{key:'Kayle',name:'Kayle'},{key:'Kayn',name:'Kayn'},
+    {key:'Kennen',name:'Kennen'},{key:'Khazix',name:"Kha'Zix"},{key:'Kindred',name:'Kindred'},
+    {key:'Kled',name:'Kled'},{key:'KogMaw',name:"Kog'Maw"},{key:'KSante',name:"K'Sante"},
+    {key:'Leblanc',name:'LeBlanc'},{key:'LeeSin',name:'Lee Sin'},{key:'Leona',name:'Leona'},
+    {key:'Lillia',name:'Lillia'},{key:'Lissandra',name:'Lissandra'},{key:'Lucian',name:'Lucian'},
+    {key:'Lulu',name:'Lulu'},{key:'Lux',name:'Lux'},{key:'Malphite',name:'Malphite'},
+    {key:'Malzahar',name:'Malzahar'},{key:'Maokai',name:'Maokai'},{key:'MasterYi',name:'Master Yi'},
+    {key:'Mel',name:'Mel'},{key:'Milio',name:'Milio'},{key:'MissFortune',name:'Miss Fortune'},
+    {key:'MonkeyKing',name:'Wukong'},{key:'Mordekaiser',name:'Mordekaiser'},{key:'Morgana',name:'Morgana'},
+    {key:'Naafiri',name:'Naafiri'},{key:'Nami',name:'Nami'},{key:'Nasus',name:'Nasus'},
+    {key:'Nautilus',name:'Nautilus'},{key:'Neeko',name:'Neeko'},{key:'Nidalee',name:'Nidalee'},
+    {key:'Nilah',name:'Nilah'},{key:'Nocturne',name:'Nocturne'},{key:'Nunu',name:'Nunu & Willump'},
+    {key:'Olaf',name:'Olaf'},{key:'Orianna',name:'Orianna'},{key:'Ornn',name:'Ornn'},
+    {key:'Pantheon',name:'Pantheon'},{key:'Poppy',name:'Poppy'},{key:'Pyke',name:'Pyke'},
+    {key:'Qiyana',name:'Qiyana'},{key:'Quinn',name:'Quinn'},{key:'Rakan',name:'Rakan'},
+    {key:'Rammus',name:'Rammus'},{key:'RekSai',name:"Rek'Sai"},{key:'Rell',name:'Rell'},
+    {key:'Renata',name:'Renata Glasc'},{key:'Renekton',name:'Renekton'},{key:'Rengar',name:'Rengar'},
+    {key:'Riven',name:'Riven'},{key:'Rumble',name:'Rumble'},{key:'Ryze',name:'Ryze'},
+    {key:'Samira',name:'Samira'},{key:'Senna',name:'Senna'},{key:'Seraphine',name:'Seraphine'},
+    {key:'Sett',name:'Sett'},{key:'Shaco',name:'Shaco'},{key:'Shen',name:'Shen'},
+    {key:'Shyvana',name:'Shyvana'},{key:'Singed',name:'Singed'},{key:'Sion',name:'Sion'},
+    {key:'Sivir',name:'Sivir'},{key:'Skarner',name:'Skarner'},{key:'Sona',name:'Sona'},
+    {key:'Soraka',name:'Soraka'},{key:'Swain',name:'Swain'},{key:'Sylas',name:'Sylas'},
+    {key:'Syndra',name:'Syndra'},{key:'TahmKench',name:'Tahm Kench'},{key:'Talon',name:'Talon'},
+    {key:'Taric',name:'Taric'},{key:'Teemo',name:'Teemo'},{key:'Thresh',name:'Thresh'},
+    {key:'Tristana',name:'Tristana'},{key:'Trundle',name:'Trundle'},{key:'Tryndamere',name:'Tryndamere'},
+    {key:'TwistedFate',name:'Twisted Fate'},{key:'Twitch',name:'Twitch'},{key:'Udyr',name:'Udyr'},
+    {key:'Urgot',name:'Urgot'},{key:'Varus',name:'Varus'},{key:'Vayne',name:'Vayne'},
+    {key:'Veigar',name:'Veigar'},{key:'Velkoz',name:"Vel'Koz"},{key:'Vex',name:'Vex'},
+    {key:'Vi',name:'Vi'},{key:'Viego',name:'Viego'},{key:'Viktor',name:'Viktor'},
+    {key:'Vladimir',name:'Vladimir'},{key:'Volibear',name:'Volibear'},{key:'Warwick',name:'Warwick'},
+    {key:'Xayah',name:'Xayah'},{key:'XinZhao',name:'Xin Zhao'},{key:'Yasuo',name:'Yasuo'},
+    {key:'Yone',name:'Yone'},{key:'Yorick',name:'Yorick'},{key:'Yuumi',name:'Yuumi'},
+    {key:'Zac',name:'Zac'},{key:'Zed',name:'Zed'},{key:'Zeri',name:'Zeri'},
+    {key:'Ziggs',name:'Ziggs'},{key:'Zilean',name:'Zilean'},{key:'Zoe',name:'Zoe'},
+    {key:'Zyra',name:'Zyra'},
+];
+
+// ── Picker state ──────────────────────────────────────
+let selectedChamp = null; // { key, name } or null
+
+function buildPickerGrid(filter = '') {
+    const grid = document.getElementById('picker-grid');
+    const q = filter.toLowerCase().trim();
+    const visible = q ? CHAMPS.filter(c => c.name.toLowerCase().includes(q)) : CHAMPS;
+
+    let html = '';
+
+    // "No champion" option
+    if (!q) {
+        const sel = !selectedChamp ? 'selected' : '';
+        html += `<div class="no-champ-opt ${sel}" onclick="selectChamp(null)">
+            <div class="no-icon">?</div>
+            <span>None</span>
+        </div>`;
+    }
+
+    for (const c of visible) {
+        const sel = selectedChamp && selectedChamp.key === c.key ? 'selected' : '';
+        html += `<div class="champ-option ${sel}" data-key="${c.key}" data-name="${esc(c.name)}" onclick="selectChampEl(this)">
+            <img src="${imgUrl(c.key)}" alt="${esc(c.name)}" loading="lazy" />
+            <span>${esc(c.name)}</span>
+        </div>`;
+    }
+
+    if (q && visible.length === 0) {
+        html = `<div style="color:#3a4a6a;font-size:0.78rem;padding:16px;text-align:center;grid-column:1/-1">No champions found</div>`;
+    }
+
+    grid.innerHTML = html;
+}
+
+function selectChampEl(el) {
+    selectChamp({ key: el.dataset.key, name: el.dataset.name });
+}
+
+// 'add' = new player form, 'modal' = edit modal
+let pickerTarget = 'add';
+let modalChamp = null;
+
+function selectChamp(champ) {
+    if (pickerTarget === 'modal') {
+        modalChamp = champ;
+        const avatarEl = document.getElementById('m-avatar');
+        const subEl    = document.getElementById('m-champ');
+        if (champ) {
+            avatarEl.src = imgUrl(champ.key);
+            subEl.textContent = champ.name;
+        } else {
+            avatarEl.src = '';
+            subEl.textContent = 'No champion selected';
+        }
+    } else {
+        selectedChamp = champ;
+        const thumbWrap = document.getElementById('picker-thumb-wrap');
+        const label = document.getElementById('picker-label');
+        if (champ) {
+            thumbWrap.outerHTML = `<img class="picker-thumb" id="picker-thumb-wrap" src="${imgUrl(champ.key)}" alt="${esc(champ.name)}" />`;
+            label.textContent = champ.name;
+        } else {
+            const existing = document.getElementById('picker-thumb-wrap');
+            if (existing.tagName === 'IMG') {
+                existing.outerHTML = `<div class="picker-thumb placeholder" id="picker-thumb-wrap">?</div>`;
+            }
+            label.textContent = 'Pick Champion';
+        }
+    }
+    buildPickerGrid(document.getElementById('picker-search').value);
+    closePicker();
+}
+
+function openPickerAt(anchorEl) {
+    const dd = document.getElementById('picker-dropdown');
+    const rect = anchorEl.getBoundingClientRect();
+    const dropW = Math.min(340, window.innerWidth - 20);
+    let left = rect.left + rect.width / 2 - dropW / 2;
+    if (left + dropW > window.innerWidth - 10) left = window.innerWidth - dropW - 10;
+    dd.style.top  = (rect.bottom + 6) + 'px';
+    dd.style.left = Math.max(10, left) + 'px';
+    dd.style.width = dropW + 'px';
+    dd.classList.add('open');
+    document.getElementById('picker-search').value = '';
+    buildPickerGrid();
+    document.getElementById('picker-search').focus();
+}
+
+function togglePicker() {
+    const dd = document.getElementById('picker-dropdown');
+    const btn = document.getElementById('picker-btn');
+    if (dd.classList.contains('open') && pickerTarget === 'add') { closePicker(); return; }
+    pickerTarget = 'add';
+    btn.classList.add('open');
+    openPickerAt(btn);
+}
+
+function openModalPicker() {
+    pickerTarget = 'modal';
+    document.getElementById('picker-btn').classList.remove('open');
+    openPickerAt(document.querySelector('.modal-avatar-wrap'));
+}
+
+function closePicker() {
+    document.getElementById('picker-dropdown').classList.remove('open');
+    document.getElementById('picker-btn').classList.remove('open');
+}
+
+function filterPicker() {
+    buildPickerGrid(document.getElementById('picker-search').value);
+}
+
+// Close picker when clicking outside
+document.addEventListener('click', e => {
+    const inPicker   = document.getElementById('champ-picker').contains(e.target);
+    const inDropdown = document.getElementById('picker-dropdown').contains(e.target);
+    const inModalAvatar = document.querySelector('.modal-avatar-wrap')?.contains(e.target);
+    if (!inPicker && !inDropdown && !inModalAvatar) closePicker();
+});
+
+// ── Supabase ──────────────────────────────────────────
+// Replace these two values with your own from supabase.com → Settings → API
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── Player data ───────────────────────────────────────
+let players = [];
+let editId  = null;
+
+function toPlayer(row) {
+    return { id: row.id, name: row.name, champKey: row.champ_key, champName: row.champ_name, wins: row.wins, losses: row.losses };
+}
+
+async function loadPlayers() {
+    const { data, error } = await db.from('players').select('*').order('created_at', { ascending: true });
+    if (error) {
+        console.error('Supabase error:', error.message);
+        document.getElementById('standings-body').innerHTML =
+            `<tr><td colspan="7"><div class="empty-state" style="color:#e05050">⚠ Could not connect to database.<br>Check your SUPABASE_URL and SUPABASE_KEY.</div></td></tr>`;
+        return;
+    }
+    players = data.map(toPlayer);
+    render();
+}
+
+// Real-time: re-render whenever any row is inserted, updated, or deleted
+db.channel('players-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, loadPlayers)
+    .subscribe();
+
+async function addPlayer() {
+    const inp  = document.getElementById('player-name');
+    const name = inp.value.trim();
+    if (!name) { inp.focus(); return; }
+
+    const { error } = await db.from('players').insert({
+        name,
+        champ_key:  selectedChamp?.key  || null,
+        champ_name: selectedChamp?.name || null,
+        wins: 0,
+        losses: 0,
+    });
+
+    if (error) { console.error(error); return; }
+    inp.value = '';
+    inp.focus();
+    // real-time subscription handles the re-render
+}
+
+document.getElementById('player-name').addEventListener('keydown', e => { if (e.key === 'Enter') addPlayer(); });
+
+async function addWin(id) {
+    const p = players.find(x => x.id === id);
+    if (!p) return;
+    await db.from('players').update({ wins: p.wins + 1 }).eq('id', id);
+}
+
+async function addLoss(id) {
+    const p = players.find(x => x.id === id);
+    if (!p) return;
+    await db.from('players').update({ losses: p.losses + 1 }).eq('id', id);
+}
+
+async function remove(id) {
+    if (!confirm('Remove this summoner?')) return;
+    await db.from('players').delete().eq('id', id);
+}
+
+function openModal(id) {
+    const p = players.find(x => x.id === id); if (!p) return;
+    editId     = id;
+    modalChamp = p.champKey ? { key: p.champKey, name: p.champName } : null;
+    document.getElementById('m-avatar').src     = p.champKey ? imgUrl(p.champKey) : '';
+    document.getElementById('m-name').textContent  = p.name;
+    document.getElementById('m-champ').textContent = p.champName || 'Click portrait to set champion';
+    document.getElementById('m-wins').value         = p.wins;
+    document.getElementById('m-losses').value       = p.losses;
+    document.getElementById('modal').classList.add('active');
+    document.getElementById('m-wins').focus();
+}
+
+function closeModal() {
+    closePicker();
+    document.getElementById('modal').classList.remove('active');
+    editId = null; modalChamp = null;
+}
+
+async function saveModal() {
+    if (!editId) return;
+    const wins   = Math.max(0, parseInt(document.getElementById('m-wins').value)   || 0);
+    const losses = Math.max(0, parseInt(document.getElementById('m-losses').value) || 0);
+
+    const { error } = await db.from('players').update({
+        wins,
+        losses,
+        champ_key:  modalChamp?.key  || null,
+        champ_name: modalChamp?.name || null,
+    }).eq('id', editId);
+
+    if (error) { console.error(error); return; }
+    closeModal();
+}
+
+document.getElementById('modal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Render ────────────────────────────────────────────
+function wr(w, l) { return w+l===0 ? 0 : Math.round(w/(w+l)*100); }
+function wrColor(r) { return r>=60?'#50e070':r>=50?'#c8a96e':'#e05050'; }
+
+const MEDALS = ['🥇','🥈','🥉'];
+
+function render() {
+    const sorted = [...players].sort((a, b) => {
+        const ra = wr(a.wins,a.losses), rb = wr(b.wins,b.losses);
+        if (rb!==ra) return rb-ra;
+        if (b.wins!==a.wins) return b.wins-a.wins;
+        return a.losses-b.losses;
+    });
+
+    const tbody = document.getElementById('standings-body');
+    if (!sorted.length) {
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No summoners yet — add one above!</div></td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = sorted.map((p, i) => {
+        const rank = i + 1;
+        const rate = wr(p.wins, p.losses);
+        const color = wrColor(rate);
+        const medal = MEDALS[i] ?? rank;
+        const hasImg = !!p.champKey;
+        const avatar = hasImg
+            ? `<div class="avatar-wrap"><img src="${imgUrl(p.champKey)}" alt="${esc(p.champName)}" /></div>`
+            : `<div class="avatar-wrap" style="width:46px;height:46px;border-radius:50%;border:2px dashed #1a2840;display:flex;align-items:center;justify-content:center;color:#2a3a5a;font-size:1.2rem">?</div>`;
+
+        return `<tr>
+            <td class="rank-col">${medal}</td>
+            <td>
+                <div class="name-cell">
+                    ${avatar}
+                    <div>
+                        <div class="player-name">${esc(p.name)}</div>
+                        <div class="champ-sub">${p.champName ? esc(p.champName) : ''}</div>
+                    </div>
+                </div>
+            </td>
+            <td class="center wins">${p.wins}</td>
+            <td class="center losses">${p.losses}</td>
+            <td class="center">
+                <div class="wr-val" style="color:${color}">${p.wins+p.losses===0?'—':rate+'%'}</div>
+                <div class="wr-bar"><div class="wr-fill" style="width:${rate}%;background:${color}"></div></div>
+            </td>
+            <td class="center admin-col">
+                <div class="row-actions">
+                    <button class="qbtn w" onclick="addWin(${p.id})" title="Add Win">W</button>
+                    <button class="qbtn l" onclick="addLoss(${p.id})" title="Add Loss">L</button>
+                </div>
+            </td>
+            <td class="center admin-col">
+                <div class="row-actions">
+                    <button class="btn btn-gold btn-sm" onclick="openModal(${p.id})">Edit</button>
+                    <button class="del-btn" onclick="remove(${p.id})">✕</button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadPlayers();
+
+// ── Admin System ──────────────────────────────────────
+const HASH_KEY    = 'lol-admin-hash';
+const SESSION_KEY = 'lol-admin-session';
+
+async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function isAdmin() { return sessionStorage.getItem(SESSION_KEY) === '1'; }
+function hasAdminSetup() { return !!localStorage.getItem(HASH_KEY); }
+
+function applyAdminMode() {
+    if (isAdmin()) {
+        document.body.classList.add('admin-mode');
+        document.getElementById('admin-toggle-btn').textContent = '🔓 Admin';
+    } else {
+        document.body.classList.remove('admin-mode');
+        document.getElementById('admin-toggle-btn').textContent = '🔒 Admin';
+    }
+}
+
+function openAdminModal() {
+    const modal = document.getElementById('admin-modal');
+    document.getElementById('admin-err').textContent = '';
+    document.getElementById('admin-pass').value = '';
+    document.getElementById('admin-confirm').value = '';
+
+    if (isAdmin()) {
+        // Show logged-in view
+        document.getElementById('admin-modal-icon').textContent = '🔓';
+        document.getElementById('admin-modal-title').textContent = 'Admin Panel';
+        document.getElementById('admin-setup-note').textContent = '';
+        document.getElementById('admin-fields').style.display = 'none';
+        document.getElementById('admin-actions').style.display = 'none';
+        document.getElementById('admin-logout-view').style.display = '';
+    } else if (!hasAdminSetup()) {
+        // First-time setup
+        document.getElementById('admin-modal-icon').textContent = '🛡️';
+        document.getElementById('admin-modal-title').textContent = 'Set Admin Password';
+        document.getElementById('admin-setup-note').textContent = 'No admin has been set up yet. Enter a password to claim admin access.';
+        document.getElementById('admin-pass-label').textContent = 'New Password';
+        document.getElementById('admin-confirm-wrap').style.display = '';
+        document.getElementById('admin-submit-btn').textContent = 'Claim Admin';
+        document.getElementById('admin-fields').style.display = '';
+        document.getElementById('admin-actions').style.display = '';
+        document.getElementById('admin-logout-view').style.display = 'none';
+    } else {
+        // Login
+        document.getElementById('admin-modal-icon').textContent = '🔒';
+        document.getElementById('admin-modal-title').textContent = 'Admin Login';
+        document.getElementById('admin-setup-note').textContent = '';
+        document.getElementById('admin-pass-label').textContent = 'Password';
+        document.getElementById('admin-confirm-wrap').style.display = 'none';
+        document.getElementById('admin-submit-btn').textContent = 'Login';
+        document.getElementById('admin-fields').style.display = '';
+        document.getElementById('admin-actions').style.display = '';
+        document.getElementById('admin-logout-view').style.display = 'none';
+    }
+
+    modal.classList.add('active');
+    setTimeout(() => document.getElementById('admin-pass').focus(), 50);
+}
+
+function closeAdminModal() {
+    document.getElementById('admin-modal').classList.remove('active');
+}
+
+async function adminSubmit() {
+    const pass    = document.getElementById('admin-pass').value;
+    const confirm = document.getElementById('admin-confirm').value;
+    const errEl   = document.getElementById('admin-err');
+    errEl.textContent = '';
+
+    if (!pass) { errEl.textContent = 'Enter a password.'; return; }
+
+    if (!hasAdminSetup()) {
+        // First-time claim
+        if (pass !== confirm) { errEl.textContent = 'Passwords do not match.'; return; }
+        if (pass.length < 4)  { errEl.textContent = 'Password must be at least 4 characters.'; return; }
+        const hash = await sha256(pass);
+        localStorage.setItem(HASH_KEY, hash);
+        sessionStorage.setItem(SESSION_KEY, '1');
+        applyAdminMode();
+        closeAdminModal();
+    } else {
+        // Login
+        const hash   = await sha256(pass);
+        const stored = localStorage.getItem(HASH_KEY);
+        if (hash === stored) {
+            sessionStorage.setItem(SESSION_KEY, '1');
+            applyAdminMode();
+            closeAdminModal();
+        } else {
+            errEl.textContent = 'Incorrect password.';
+            document.getElementById('admin-pass').value = '';
+            document.getElementById('admin-pass').focus();
+        }
+    }
+}
+
+function adminLogout() {
+    sessionStorage.removeItem(SESSION_KEY);
+    applyAdminMode();
+    closeAdminModal();
+}
+
+function adminChangePassword() {
+    localStorage.removeItem(HASH_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+    applyAdminMode();
+    openAdminModal(); // re-opens in "set password" mode
+}
+
+// Enter key in admin modal
+document.getElementById('admin-pass').addEventListener('keydown',    e => { if(e.key==='Enter') adminSubmit(); });
+document.getElementById('admin-confirm').addEventListener('keydown', e => { if(e.key==='Enter') adminSubmit(); });
+document.getElementById('admin-modal').addEventListener('click', function(e) { if(e.target===this) closeAdminModal(); });
+
+// Init admin state on load
+applyAdminMode();
+</script>
+</body>
+</html>
