@@ -468,6 +468,39 @@
         }
         .btn-ghost:hover { border-color: #c8a96e; color: #c8a96e; }
 
+        /* ── Mode Tabs ───────────────────────────────── */
+        .mode-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border: 1px solid #1a2840;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .mode-tab {
+            flex: 1; padding: 11px 20px;
+            background: transparent; border: none;
+            color: #4a5a7a; font-size: 0.75rem;
+            letter-spacing: 2px; text-transform: uppercase;
+            font-weight: 700; cursor: pointer; transition: all 0.18s;
+        }
+        .mode-tab:not(:last-child) { border-right: 1px solid #1a2840; }
+        .mode-tab:hover { background: rgba(200,169,110,0.05); color: #c8a96e; }
+        .mode-tab.active { background: rgba(200,169,110,0.12); color: #c8a96e; border-bottom: 2px solid #c8a96e; }
+
+        /* ── Log Game type toggle ─────────────────────── */
+        .lg-type-toggle {
+            display: flex; margin-bottom: 16px;
+            border: 1px solid #1a2840; border-radius: 3px; overflow: hidden;
+        }
+        .lg-type-btn {
+            flex: 1; padding: 8px; background: transparent; border: none;
+            color: #4a5a7a; font-size: 0.72rem; letter-spacing: 2px;
+            text-transform: uppercase; font-weight: 700; cursor: pointer; transition: all 0.15s;
+        }
+        .lg-type-btn:not(:last-child) { border-right: 1px solid #1a2840; }
+        .lg-type-btn:hover { background: rgba(200,169,110,0.05); color: #c8a96e; }
+        .lg-type-btn.active { background: rgba(200,169,110,0.12); color: #c8a96e; }
+
         /* ── Mobile stats sub-text (hidden on desktop) ── */
         .mobile-stats { display: none; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
         .mobile-stat  { font-size: 0.65rem; color: #4a5a7a; }
@@ -756,9 +789,15 @@
         </div>
     </div>
 
+    <!-- Mode Tabs -->
+    <div class="mode-tabs">
+        <button class="mode-tab active" id="tab-custom" onclick="switchTab('custom')">⚔ Custom Games</button>
+        <button class="mode-tab" id="tab-aram" onclick="switchTab('aram')">🎮 ARAM</button>
+    </div>
+
     <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-            <div class="card-title" style="margin-bottom:0">🏆 Standings</div>
+            <div class="card-title" style="margin-bottom:0" id="standings-title">🏆 Standings</div>
             <button class="btn btn-gold btn-sm admin-col" onclick="openLogGame()">⚔ Log Game</button>
         </div>
         <table>
@@ -831,6 +870,36 @@
         <div class="field-full">
             <input type="text" id="m-riot-id" placeholder="PlayerName#NA1" />
         </div>
+        <div class="modal-section-label">ARAM — wins / losses</div>
+        <div class="modal-fields">
+            <div class="field">
+                <label>ARAM Wins</label>
+                <input type="number" id="m-aram-wins" min="0" />
+            </div>
+            <div class="field">
+                <label>ARAM Losses</label>
+                <input type="number" id="m-aram-losses" min="0" />
+            </div>
+        </div>
+        <div class="modal-section-label">ARAM — K / D / A &amp; Damage</div>
+        <div class="modal-fields-3">
+            <div class="field">
+                <label>Kills</label>
+                <input type="number" id="m-aram-kills" min="0" />
+            </div>
+            <div class="field">
+                <label>Deaths</label>
+                <input type="number" id="m-aram-deaths" min="0" />
+            </div>
+            <div class="field">
+                <label>Assists</label>
+                <input type="number" id="m-aram-assists" min="0" />
+            </div>
+        </div>
+        <div class="field-full">
+            <label>Total ARAM Damage</label>
+            <input type="number" id="m-aram-damage" min="0" placeholder="0" />
+        </div>
         <div class="modal-actions">
             <button class="btn-ghost" onclick="closeModal()">Cancel</button>
             <button class="btn btn-gold" onclick="saveModal()">Save</button>
@@ -841,7 +910,11 @@
 <!-- Log Game Modal -->
 <div class="overlay" id="log-modal">
     <div class="modal">
-        <h3>⚔ Log Game Result</h3>
+        <h3 id="lg-modal-title">⚔ Log Game Result</h3>
+        <div class="lg-type-toggle">
+            <button class="lg-type-btn active" id="lg-type-custom" onclick="setLogGameType('custom')">⚔ Custom</button>
+            <button class="lg-type-btn" id="lg-type-aram" onclick="setLogGameType('aram')">🎮 ARAM</button>
+        </div>
         <div class="lg-err" id="lg-err"></div>
         <div class="lg-players" id="lg-players"></div>
         <div class="modal-actions">
@@ -1166,8 +1239,10 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Player data ───────────────────────────────────────
-let players = [];
-let editId  = null;
+let players    = [];
+let editId     = null;
+let activeTab  = 'custom'; // 'custom' | 'aram'
+let logGameType = 'custom';
 
 function toPlayer(row) {
     return {
@@ -1177,7 +1252,30 @@ function toPlayer(row) {
         kills: row.kills || 0, deaths: row.deaths || 0, assists: row.assists || 0,
         damage: row.damage || 0,
         riotId: row.riot_id || '',
+        aramWins:    row.aram_wins    || 0,
+        aramLosses:  row.aram_losses  || 0,
+        aramKills:   row.aram_kills   || 0,
+        aramDeaths:  row.aram_deaths  || 0,
+        aramAssists: row.aram_assists || 0,
+        aramDamage:  row.aram_damage  || 0,
     };
+}
+
+function activeStats(p) {
+    if (activeTab === 'aram') {
+        return { wins: p.aramWins, losses: p.aramLosses, kills: p.aramKills, deaths: p.aramDeaths, assists: p.aramAssists, damage: p.aramDamage };
+    }
+    return { wins: p.wins, losses: p.losses, kills: p.kills, deaths: p.deaths, assists: p.assists, damage: p.damage };
+}
+
+function switchTab(tab) {
+    activeTab = tab;
+    document.getElementById('tab-custom').classList.toggle('active', tab === 'custom');
+    document.getElementById('tab-aram').classList.toggle('active', tab === 'aram');
+    document.getElementById('standings-title').textContent = tab === 'aram' ? '🎮 ARAM Standings' : '🏆 Standings';
+    // Clear expanded history panels — they're tab-specific
+    expandedPlayers.clear();
+    render();
 }
 
 async function loadPlayers() {
@@ -1235,13 +1333,21 @@ document.getElementById('player-name').addEventListener('keydown', e => { if (e.
 async function addWin(id) {
     const p = players.find(x => x.id === id);
     if (!p) return;
-    await db.from('players').update({ wins: p.wins + 1 }).eq('id', id);
+    if (activeTab === 'aram') {
+        await db.from('players').update({ aram_wins: p.aramWins + 1 }).eq('id', id);
+    } else {
+        await db.from('players').update({ wins: p.wins + 1 }).eq('id', id);
+    }
 }
 
 async function addLoss(id) {
     const p = players.find(x => x.id === id);
     if (!p) return;
-    await db.from('players').update({ losses: p.losses + 1 }).eq('id', id);
+    if (activeTab === 'aram') {
+        await db.from('players').update({ aram_losses: p.aramLosses + 1 }).eq('id', id);
+    } else {
+        await db.from('players').update({ losses: p.losses + 1 }).eq('id', id);
+    }
 }
 
 async function remove(id) {
@@ -1263,6 +1369,12 @@ function openModal(id) {
     document.getElementById('m-assists').value     = p.assists;
     document.getElementById('m-damage').value      = p.damage;
     document.getElementById('m-riot-id').value     = p.riotId;
+    document.getElementById('m-aram-wins').value    = p.aramWins;
+    document.getElementById('m-aram-losses').value  = p.aramLosses;
+    document.getElementById('m-aram-kills').value   = p.aramKills;
+    document.getElementById('m-aram-deaths').value  = p.aramDeaths;
+    document.getElementById('m-aram-assists').value = p.aramAssists;
+    document.getElementById('m-aram-damage').value  = p.aramDamage;
     document.getElementById('modal').classList.add('active');
     document.getElementById('m-wins').focus();
 }
@@ -1284,12 +1396,25 @@ async function saveModal() {
     const damage  = Math.max(0, parseInt(document.getElementById('m-damage').value)  || 0);
     const riotId  = document.getElementById('m-riot-id').value.trim() || null;
 
+    const aramWins    = Math.max(0, parseInt(document.getElementById('m-aram-wins').value)    || 0);
+    const aramLosses  = Math.max(0, parseInt(document.getElementById('m-aram-losses').value)  || 0);
+    const aramKills   = Math.max(0, parseInt(document.getElementById('m-aram-kills').value)   || 0);
+    const aramDeaths  = Math.max(0, parseInt(document.getElementById('m-aram-deaths').value)  || 0);
+    const aramAssists = Math.max(0, parseInt(document.getElementById('m-aram-assists').value) || 0);
+    const aramDamage  = Math.max(0, parseInt(document.getElementById('m-aram-damage').value)  || 0);
+
     const { error } = await db.from('players').update({
         wins, losses,
         kills, deaths, assists, damage,
-        riot_id:    riotId,
-        champ_key:  modalChamp?.key  || null,
-        champ_name: modalChamp?.name || null,
+        riot_id:      riotId,
+        champ_key:    modalChamp?.key  || null,
+        champ_name:   modalChamp?.name || null,
+        aram_wins:    aramWins,
+        aram_losses:  aramLosses,
+        aram_kills:   aramKills,
+        aram_deaths:  aramDeaths,
+        aram_assists: aramAssists,
+        aram_damage:  aramDamage,
     }).eq('id', editId);
 
     if (error) { console.error(error); return; }
@@ -1322,10 +1447,11 @@ const MEDALS = ['🥇','🥈','🥉'];
 
 function render() {
     const sorted = [...players].sort((a, b) => {
-        const ra = wr(a.wins,a.losses), rb = wr(b.wins,b.losses);
+        const sa = activeStats(a), sb = activeStats(b);
+        const ra = wr(sa.wins,sa.losses), rb = wr(sb.wins,sb.losses);
         if (rb!==ra) return rb-ra;
-        if (b.wins!==a.wins) return b.wins-a.wins;
-        return a.losses-b.losses;
+        if (sb.wins!==sa.wins) return sb.wins-sa.wins;
+        return sa.losses-sb.losses;
     });
 
     const tbody = document.getElementById('standings-body');
@@ -1340,7 +1466,8 @@ function render() {
 
     tbody.innerHTML = sortedPlayers.map((p, i) => {
         const rank  = i + 1;
-        const rate  = wr(p.wins, p.losses);
+        const s     = activeStats(p);
+        const rate  = wr(s.wins, s.losses);
         const color = wrColor(rate);
         const medal = MEDALS[i] ?? rank;
         const hasImg = !!p.champKey;
@@ -1348,14 +1475,14 @@ function render() {
             ? `<div class="avatar-wrap"><img src="${imgUrl(p.champKey)}" alt="${esc(p.champName)}" /></div>`
             : `<div class="avatar-wrap" style="width:46px;height:46px;border-radius:50%;border:2px dashed #1a2840;display:flex;align-items:center;justify-content:center;color:#2a3a5a;font-size:1.2rem">?</div>`;
 
-        const games   = p.wins + p.losses;
-        const kda     = kdaRatio(p.kills, p.deaths, p.assists);
+        const games   = s.wins + s.losses;
+        const kda     = kdaRatio(s.kills, s.deaths, s.assists);
         const kdaClr  = kdaColor(kda);
-        const dmg     = avgDmg(p.damage, games);
+        const dmg     = avgDmg(s.damage, games);
 
         const kdaCell = kda !== null
             ? `<div class="kda-val" style="color:${kdaClr}">${kda}</div>
-               <div class="stat-sub">${p.kills}/${p.deaths}/${p.assists}</div>`
+               <div class="stat-sub">${s.kills}/${s.deaths}/${s.assists}</div>`
             : `<span style="color:#3a4a6a">—</span>`;
 
         const dmgCell = dmg !== null
@@ -1385,8 +1512,8 @@ function render() {
                     </div>
                 </div>
             </td>
-            <td class="center wins">${p.wins}</td>
-            <td class="center losses">${p.losses}</td>
+            <td class="center wins">${s.wins}</td>
+            <td class="center losses">${s.losses}</td>
             <td class="center">
                 <div class="wr-val" style="color:${color}">${games===0?'—':rate+'%'}</div>
                 <div class="wr-bar"><div class="wr-fill" style="width:${rate}%;background:${color}"></div></div>
@@ -1410,7 +1537,7 @@ function render() {
 
     // Re-insert history panels for players that were expanded before re-render
     for (const p of toRestore) {
-        const cached = historyCache.get(p.id);
+        const cached = historyCache.get(historyCacheKey(p.id));
         if (cached) insertHistoryRow(p.id, cached);
         else fetchAndShowHistory(p.id);
     }
@@ -1423,12 +1550,20 @@ function esc(s) {
 loadPlayers();
 
 // ── Log Game ──────────────────────────────────────────
+function setLogGameType(type) {
+    logGameType = type;
+    document.getElementById('lg-type-custom').classList.toggle('active', type === 'custom');
+    document.getElementById('lg-type-aram').classList.toggle('active', type === 'aram');
+}
+
 function openLogGame() {
     lgChamps.clear();
     players.forEach(p => {
         if (p.champKey) lgChamps.set(p.id, { key: p.champKey, name: p.champName });
     });
     document.getElementById('lg-err').textContent = '';
+    // Default game type to whatever tab is active
+    setLogGameType(activeTab);
     buildLogRows();
     document.getElementById('log-modal').classList.add('active');
 }
@@ -1523,16 +1658,23 @@ async function submitGame() {
         const dmg = Math.max(0, parseInt(document.getElementById(`lg-dmg-${p.id}`).value) || 0);
         const lgC = lgChamps.get(p.id) || null;
 
-        updates.push(
-            db.from('players').update({
-                wins:    p.wins    + (wActive ? 1 : 0),
-                losses:  p.losses  + (lActive ? 1 : 0),
-                kills:   p.kills   + k,
-                deaths:  p.deaths  + d,
-                assists: p.assists + a,
-                damage:  p.damage  + dmg,
-            }).eq('id', p.id)
-        );
+        const playerUpdate = logGameType === 'aram' ? {
+            aram_wins:    p.aramWins    + (wActive ? 1 : 0),
+            aram_losses:  p.aramLosses  + (lActive ? 1 : 0),
+            aram_kills:   p.aramKills   + k,
+            aram_deaths:  p.aramDeaths  + d,
+            aram_assists: p.aramAssists + a,
+            aram_damage:  p.aramDamage  + dmg,
+        } : {
+            wins:    p.wins    + (wActive ? 1 : 0),
+            losses:  p.losses  + (lActive ? 1 : 0),
+            kills:   p.kills   + k,
+            deaths:  p.deaths  + d,
+            assists: p.assists + a,
+            damage:  p.damage  + dmg,
+        };
+
+        updates.push(db.from('players').update(playerUpdate).eq('id', p.id));
 
         histRows.push({
             player_id:  p.id,
@@ -1540,6 +1682,7 @@ async function submitGame() {
             kills:      k, deaths: d, assists: a, damage: dmg,
             champ_key:  lgC?.key  || null,
             champ_name: lgC?.name || null,
+            game_type:  logGameType,
         });
     }
 
@@ -1552,7 +1695,7 @@ async function submitGame() {
     if (histRows.length) {
         const { error: hErr } = await db.from('match_history').insert(histRows);
         if (hErr) console.error('History insert error:', hErr.message);
-        histRows.forEach(r => historyCache.delete(r.player_id));
+        histRows.forEach(r => { historyCache.delete(`${r.player_id}-custom`); historyCache.delete(`${r.player_id}-aram`); });
     }
 
     closeLogGame();
@@ -1581,11 +1724,13 @@ function toggleHistory(id) {
         expandedPlayers.add(id);
         const toggle = playerRow.querySelector('.history-toggle');
         if (toggle) toggle.textContent = '▴';
-        const cached = historyCache.get(id);
+        const cached = historyCache.get(historyCacheKey(id));
         if (cached) insertHistoryRow(id, cached);
         else fetchAndShowHistory(id);
     }
 }
+
+function historyCacheKey(id) { return `${id}-${activeTab}`; }
 
 async function fetchAndShowHistory(id) {
     // Show loading placeholder
@@ -1600,10 +1745,12 @@ async function fetchAndShowHistory(id) {
         playerRow.insertAdjacentElement('afterend', histRow);
     }
 
+    const fetchTab = activeTab; // capture at fetch time
     const { data, error } = await db
         .from('match_history')
         .select('*')
         .eq('player_id', id)
+        .eq('game_type', fetchTab)
         .order('played_at', { ascending: false })
         .limit(5);
 
@@ -1615,7 +1762,7 @@ async function fetchAndShowHistory(id) {
         return;
     }
 
-    historyCache.set(id, data || []);
+    historyCache.set(historyCacheKey(id), data || []);
     insertHistoryRow(id, data || []);
 }
 
@@ -1660,7 +1807,8 @@ async function deleteHistoryEntry(entryId, pid) {
     if (!confirm('Delete this game from history?')) return;
     const { error } = await db.from('match_history').delete().eq('id', entryId);
     if (error) { console.error(error); return; }
-    historyCache.delete(pid);
+    historyCache.delete(`${pid}-custom`);
+    historyCache.delete(`${pid}-aram`);
     fetchAndShowHistory(pid);
 }
 
