@@ -730,6 +730,26 @@
         }
         .game-del:hover { background: rgba(180,30,30,0.75); }
         body.admin-mode .game-del { display: block; }
+        .game-edit {
+            display: none;
+            background: rgba(20,60,120,0.5); border: 1px solid #1a3a6a;
+            color: #5080c0; font-size: 0.55rem; padding: 2px 6px;
+            border-radius: 2px; cursor: pointer; margin-top: 2px;
+            transition: background 0.15s;
+        }
+        .game-edit:hover { background: rgba(30,80,160,0.75); }
+        body.admin-mode .game-edit { display: block; }
+        /* Edit match modal */
+        #edit-match-modal .modal { max-width: 380px; }
+        .em-result-row { display: flex; gap: 10px; margin-bottom: 20px; }
+        .em-result-btn {
+            flex: 1; padding: 10px; border-radius: 3px; cursor: pointer; font-weight: 700;
+            font-size: 0.82rem; letter-spacing: 1px; border: 1px solid #1a2840;
+            background: rgba(0,0,0,0.4); color: #4a5a7a; transition: all 0.15s;
+        }
+        .em-result-btn.win.active  { background: rgba(20,80,30,0.7); border-color: #3a8040; color: #70d080; }
+        .em-result-btn.loss.active { background: rgba(100,20,20,0.7); border-color: #8a2020; color: #e06060; }
+        .em-err { color: #e05050; font-size: 0.72rem; min-height: 16px; margin-bottom: 8px; }
 
         /* Log game per-player champion button */
         .lg-champ-btn {
@@ -953,6 +973,30 @@
                 <button class="btn-ghost" onclick="adminChangePassword()">Change Password</button>
                 <button class="btn-ghost" style="color:#e05050;border-color:#3a1a1a" onclick="adminLogout()">Logout</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Match Modal -->
+<div class="overlay" id="edit-match-modal">
+    <div class="modal">
+        <h3>✏ Edit Game Result</h3>
+        <div class="em-result-row">
+            <button class="em-result-btn win"  id="em-w" onclick="emSetResult('W')">W — Win</button>
+            <button class="em-result-btn loss" id="em-l" onclick="emSetResult('L')">L — Loss</button>
+        </div>
+        <div class="modal-fields modal-fields-3">
+            <div class="field"><label>Kills</label><input type="number" id="em-k" min="0" max="99"></div>
+            <div class="field"><label>Deaths</label><input type="number" id="em-d" min="0" max="99"></div>
+            <div class="field"><label>Assists</label><input type="number" id="em-a" min="0" max="99"></div>
+        </div>
+        <div class="modal-fields">
+            <div class="field"><label>Damage</label><input type="number" id="em-dmg" min="0"></div>
+        </div>
+        <div class="em-err" id="em-err"></div>
+        <div class="modal-actions">
+            <button class="btn-ghost" onclick="closeEditMatch()">Cancel</button>
+            <button class="btn btn-gold" onclick="saveEditMatch()">Save Changes</button>
         </div>
     </div>
 </div>
@@ -1766,6 +1810,8 @@ async function fetchAndShowHistory(id) {
     insertHistoryRow(id, data || []);
 }
 
+const _matchDataCache = {}; // matchId → full match object
+
 function insertHistoryRow(pid, games) {
     const playerRow = document.getElementById(`player-row-${pid}`);
     if (!playerRow) return;
@@ -1782,6 +1828,7 @@ function insertHistoryRow(pid, games) {
         histRow.innerHTML = `<td colspan="9"><div class="history-panel"><span class="history-empty">No games logged yet.</span></div></td>`;
     } else {
         const cards = games.map(g => {
+            _matchDataCache[g.id] = g; // cache for edit lookup
             const isWin = g.result === 'W';
             const champImg = g.champ_key
                 ? `<img class="game-champ" src="${imgUrl(g.champ_key)}" alt="${esc(g.champ_name || '')}" />`
@@ -1794,6 +1841,7 @@ function insertHistoryRow(pid, games) {
                 ${kda ? `<div class="game-kda">${kda}</div>` : ''}
                 ${dmg ? `<div class="game-dmg">${dmg}</div>` : ''}
                 <div class="game-date">${fmtDate(g.played_at)}</div>
+                <button class="game-edit" onclick="openEditMatch(${g.id},${pid})">✏ Edit</button>
                 <button class="game-del" onclick="deleteHistoryEntry(${g.id},${pid})">✕ Del</button>
             </div>`;
         }).join('');
@@ -1804,11 +1852,125 @@ function insertHistoryRow(pid, games) {
 }
 
 async function deleteHistoryEntry(entryId, pid) {
-    if (!confirm('Delete this game from history?')) return;
-    const { error } = await db.from('match_history').delete().eq('id', entryId);
-    if (error) { console.error(error); return; }
+    if (!confirm('Delete this game from history? Player stats will be updated.')) return;
+
+    // Get match data (from cache or fetch)
+    let match = _matchDataCache[entryId];
+    if (!match) {
+        const { data } = await db.from('match_history').select('*').eq('id', entryId).single();
+        match = data;
+    }
+    if (!match) { console.error('Could not find match data'); return; }
+
+    const player = players.find(p => p.id === pid);
+    if (!player) return;
+
+    // Build stat reversal
+    const isAram = match.game_type === 'aram';
+    const playerUpdate = isAram ? {
+        aram_wins:    Math.max(0, player.aramWins    - (match.result === 'W' ? 1 : 0)),
+        aram_losses:  Math.max(0, player.aramLosses  - (match.result === 'L' ? 1 : 0)),
+        aram_kills:   Math.max(0, player.aramKills   - (match.kills   || 0)),
+        aram_deaths:  Math.max(0, player.aramDeaths  - (match.deaths  || 0)),
+        aram_assists: Math.max(0, player.aramAssists - (match.assists || 0)),
+        aram_damage:  Math.max(0, player.aramDamage  - (match.damage  || 0)),
+    } : {
+        wins:    Math.max(0, player.wins    - (match.result === 'W' ? 1 : 0)),
+        losses:  Math.max(0, player.losses  - (match.result === 'L' ? 1 : 0)),
+        kills:   Math.max(0, player.kills   - (match.kills   || 0)),
+        deaths:  Math.max(0, player.deaths  - (match.deaths  || 0)),
+        assists: Math.max(0, player.assists - (match.assists || 0)),
+        damage:  Math.max(0, player.damage  - (match.damage  || 0)),
+    };
+
+    const { error: delErr } = await db.from('match_history').delete().eq('id', entryId);
+    if (delErr) { console.error(delErr); return; }
+
+    const { error: updErr } = await db.from('players').update(playerUpdate).eq('id', pid);
+    if (updErr) console.error('Stats rollback error:', updErr.message);
+
+    delete _matchDataCache[entryId];
     historyCache.delete(`${pid}-custom`);
     historyCache.delete(`${pid}-aram`);
+    fetchAndShowHistory(pid);
+}
+
+// ── Edit Match ──────────────────────────────────────────
+let _editMatch = null; // { id, pid, ...matchFields }
+
+function openEditMatch(matchId, pid) {
+    const match = _matchDataCache[matchId];
+    if (!match) return;
+    _editMatch = { ...match, pid };
+
+    emSetResult(match.result);
+    document.getElementById('em-k').value   = match.kills   ?? '';
+    document.getElementById('em-d').value   = match.deaths  ?? '';
+    document.getElementById('em-a').value   = match.assists ?? '';
+    document.getElementById('em-dmg').value = match.damage  ?? '';
+    document.getElementById('em-err').textContent = '';
+    document.getElementById('edit-match-modal').style.display = 'flex';
+}
+
+function emSetResult(r) {
+    document.getElementById('em-w').classList.toggle('active', r === 'W');
+    document.getElementById('em-l').classList.toggle('active', r === 'L');
+}
+
+function closeEditMatch() {
+    document.getElementById('edit-match-modal').style.display = 'none';
+    _editMatch = null;
+}
+
+async function saveEditMatch() {
+    if (!_editMatch) return;
+    const errEl = document.getElementById('em-err');
+    errEl.textContent = '';
+
+    const newResult = document.getElementById('em-w').classList.contains('active') ? 'W'
+                    : document.getElementById('em-l').classList.contains('active') ? 'L' : null;
+    if (!newResult) { errEl.textContent = 'Select Win or Loss.'; return; }
+
+    const newK   = Math.max(0, parseInt(document.getElementById('em-k').value)   || 0);
+    const newD   = Math.max(0, parseInt(document.getElementById('em-d').value)   || 0);
+    const newA   = Math.max(0, parseInt(document.getElementById('em-a').value)   || 0);
+    const newDmg = Math.max(0, parseInt(document.getElementById('em-dmg').value) || 0);
+
+    const { id, pid, result: oldResult, kills: oldK, deaths: oldD, assists: oldA, damage: oldDmg, game_type } = _editMatch;
+    const player = players.find(p => p.id === pid);
+    if (!player) return;
+
+    const isAram = game_type === 'aram';
+    const winDelta  = (newResult === 'W' ? 1 : 0) - (oldResult === 'W' ? 1 : 0);
+    const lossDelta = (newResult === 'L' ? 1 : 0) - (oldResult === 'L' ? 1 : 0);
+
+    const playerUpdate = isAram ? {
+        aram_wins:    Math.max(0, player.aramWins    + winDelta),
+        aram_losses:  Math.max(0, player.aramLosses  + lossDelta),
+        aram_kills:   Math.max(0, player.aramKills   + (newK   - (oldK   || 0))),
+        aram_deaths:  Math.max(0, player.aramDeaths  + (newD   - (oldD   || 0))),
+        aram_assists: Math.max(0, player.aramAssists + (newA   - (oldA   || 0))),
+        aram_damage:  Math.max(0, player.aramDamage  + (newDmg - (oldDmg || 0))),
+    } : {
+        wins:    Math.max(0, player.wins    + winDelta),
+        losses:  Math.max(0, player.losses  + lossDelta),
+        kills:   Math.max(0, player.kills   + (newK   - (oldK   || 0))),
+        deaths:  Math.max(0, player.deaths  + (newD   - (oldD   || 0))),
+        assists: Math.max(0, player.assists + (newA   - (oldA   || 0))),
+        damage:  Math.max(0, player.damage  + (newDmg - (oldDmg || 0))),
+    };
+
+    const { error: matchErr } = await db.from('match_history').update({
+        result: newResult, kills: newK, deaths: newD, assists: newA, damage: newDmg
+    }).eq('id', id);
+    if (matchErr) { errEl.textContent = 'Save failed: ' + matchErr.message; return; }
+
+    const { error: playerErr } = await db.from('players').update(playerUpdate).eq('id', pid);
+    if (playerErr) console.error('Stats update error:', playerErr.message);
+
+    historyCache.delete(`${pid}-custom`);
+    historyCache.delete(`${pid}-aram`);
+    closeEditMatch();
     fetchAndShowHistory(pid);
 }
 
